@@ -1,0 +1,2271 @@
+const STORAGE_KEY = "ege-open-access-progress-v1";
+const APP_VERSION = "20261010-36";
+const ACCESS_KEY = "ege-access-session-v1";
+const AUTH_DB_KEY = "ege-auth-db-v1";
+const DEVICE_KEY = "ege-device-id-v1";
+const TEACHER_LOGIN = "teacher";
+const TEACHER_PASSWORD = "teacher2026";
+const cloudStore = window.egeCloudStore || null;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const subjects = {
+  history_oge: {
+    examType: "oge",
+    title: "История",
+    subtitle: "17 заданий первой части",
+    sources: []
+  },
+  social_oge: {
+    examType: "oge",
+    title: "Обществознание",
+    subtitle: "15 тестовых заданий",
+    sources: []
+  },
+  social: {
+    title: "Обществознание",
+    subtitle: "16 заданий первой части",
+    sources: [
+      {
+        id: "kotova-liskova-personal-2026-social",
+        title: "Тестовый вариант",
+        year: "2026",
+        description: "Котова-Лискова · 2026 · первая часть",
+        authorLine: "Котова-Лискова · 2026 · первая часть",
+        variants: [
+          {
+            id: "kotova-liskova-personal-2026-social-v1",
+            title: "Тестовый вариант",
+            questions: personalKotovaLiskovaFirstScan()
+          }
+        ]
+      },
+      source("fipi-open-2026-social", "ФИПИ · открытый вариант", "2026", "Открытый вариант КИМ 2026", socialQuestions()),
+      source("fipi-demo-2026-social", "ФИПИ · демоверсия", "2026", "Демоверсия, спецификация и кодификатор", rotate(socialQuestions(), 3)),
+      source("fipi-bank-social", "ФИПИ · открытый банк", "актуальный", "Банк заданий для сборки тренировок", rotate(socialQuestions(), 7))
+    ]
+  },
+  history: {
+    title: "История",
+    subtitle: "12 заданий первой части",
+    sources: [
+      source("fipi-open-2026-history", "ФИПИ · открытый вариант", "2026", "Открытый вариант КИМ 2026", historyQuestions()),
+      source("fipi-demo-2026-history", "ФИПИ · демоверсия", "2026", "Демоверсия, спецификация и кодификатор", rotate(historyQuestions(), 2)),
+      source("fipi-bank-history", "ФИПИ · открытый банк", "актуальный", "Банк заданий для сборки тренировок", rotate(historyQuestions(), 5))
+    ]
+  }
+};
+
+installLocalSources();
+
+const initialAccess = loadAccess();
+
+const state = {
+  examType: null,
+  screen: initialAccess ? "subjects" : "access",
+  subjectId: null,
+  sourceId: null,
+  variantIndex: 0,
+  questionIndex: 0,
+  selected: null,
+  matching: {},
+  reviewOpen: false,
+  progress: loadProgress(initialAccess),
+  cloudHomework: [],
+  cloudStudents: [],
+  cloudStudentMemberships: [],
+  cloudSubmissions: [],
+  cloudError: "",
+  teacherReview: null,
+  teacherTab: "students",
+  showHiddenStudents: false,
+  teacherSearch: "",
+  teacherResultFilter: "all",
+  teacherPeriod: "all",
+  teacherSort: "name",
+  teacherStudentId: null,
+  dashboardStudent: null,
+  variantNotice: "",
+  authMode: "login",
+  access: initialAccess
+};
+
+const nodes = {
+  backButton: document.querySelector("#backButton"),
+  eyebrow: document.querySelector("#eyebrow"),
+  screenTitle: document.querySelector("#screenTitle"),
+  hero: document.querySelector("#hero"),
+  screens: {
+    access: document.querySelector("#accessScreen"),
+    subjects: document.querySelector("#subjectScreen"),
+    sources: document.querySelector("#sourceScreen"),
+    variants: document.querySelector("#variantScreen"),
+    exam: document.querySelector("#examScreen"),
+    result: document.querySelector("#resultScreen"),
+    teacherReview: document.querySelector("#teacherReviewScreen"),
+    dashboard: document.querySelector("#dashboardScreen"),
+    scan: document.querySelector("#scanScreen"),
+    image: document.querySelector("#imageScreen"),
+    teacher: document.querySelector("#teacherScreen")
+  },
+  subjectList: document.querySelector("#subjectList"),
+  sourceList: document.querySelector("#sourceList"),
+  variantList: document.querySelector("#variantList"),
+  variantMeta: document.querySelector("#variantMeta"),
+  questionCount: document.querySelector("#questionCount"),
+  questionNav: document.querySelector("#questionNav"),
+  variantProgress: document.querySelector("#variantProgress"),
+  taskType: document.querySelector("#taskType"),
+  questionTitle: document.querySelector("#questionTitle"),
+  options: document.querySelector("#options"),
+  nextButton: document.querySelector("#nextButton"),
+  skipButton: document.querySelector("#skipButton"),
+  restartVariantButton: document.querySelector("#restartVariantButton"),
+  resultMeta: document.querySelector("#resultMeta"),
+  resultTitle: document.querySelector("#resultTitle"),
+  resultText: document.querySelector("#resultText"),
+  reviewList: document.querySelector("#reviewList"),
+  mistakesReviewButton: document.querySelector("#mistakesReviewButton"),
+  scanMeta: document.querySelector("#scanMeta"),
+  scanCount: document.querySelector("#scanCount"),
+  scanPages: document.querySelector("#scanPages"),
+  completeScanVariantButton: document.querySelector("#completeScanVariantButton"),
+  repeatButton: document.querySelector("#repeatButton"),
+  nextVariantButton: document.querySelector("#nextVariantButton"),
+  viewerImage: document.querySelector("#viewerImage"),
+  doneValue: document.querySelector("#doneValue"),
+  accuracyValue: document.querySelector("#accuracyValue"),
+  sourceNote: document.querySelector("#sourceNote"),
+  authCardTitle: document.querySelector("#authCardTitle"),
+  authLoginModeButton: document.querySelector("#authLoginModeButton"),
+  authRegisterModeButton: document.querySelector("#authRegisterModeButton"),
+  studentNameRow: document.querySelector("#studentNameRow"),
+  studentNameInput: document.querySelector("#studentNameInput"),
+  loginInput: document.querySelector("#loginInput"),
+  accessCodeInput: document.querySelector("#accessCodeInput"),
+  passwordToggleButton: document.querySelector("#passwordToggleButton"),
+  registerButton: document.querySelector("#registerButton"),
+  accessSubmitButton: document.querySelector("#accessSubmitButton"),
+  accessError: document.querySelector("#accessError"),
+  teacherReport: document.querySelector("#teacherReport"),
+  teacherSectionTitle: document.querySelector("#teacherSectionTitle"),
+  teacherStudentsTab: document.querySelector("#teacherStudentsTab"),
+  teacherPerformanceTab: document.querySelector("#teacherPerformanceTab"),
+  dashboardSummary: document.querySelector("#dashboardSummary"),
+  dashboardList: document.querySelector("#dashboardList"),
+  teacherReviewMeta: document.querySelector("#teacherReviewMeta"),
+  teacherReviewTitle: document.querySelector("#teacherReviewTitle"),
+  teacherReviewScore: document.querySelector("#teacherReviewScore"),
+  teacherReviewList: document.querySelector("#teacherReviewList")
+};
+
+function source(id, title, year, description, questions) {
+  return {
+    id,
+    title,
+    year,
+    description,
+    variants: [1, 2, 3].map((number) => ({
+      id: `${id}-v${number}`,
+      title: `Вариант ${number}`,
+      questions: rotate(questions, number - 1).map((question) => ({ ...question }))
+    }))
+  };
+}
+
+function installLocalSources() {
+  const localSources = [
+    ...(window.localInteractiveSources || [])
+  ];
+  localSources.forEach((sourceItem) => {
+    const subject = subjects[sourceItem.subjectId || "social"];
+    if (!subject) return;
+    const exists = subject.sources.some((existing) => existing.id === sourceItem.id);
+    if (!exists) subject.sources.unshift(sourceItem);
+  });
+}
+
+function getDeviceId() {
+  let id = localStorage.getItem(DEVICE_KEY);
+  if (!id) {
+    id = `device-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(DEVICE_KEY, id);
+  }
+  return id;
+}
+
+function createEmptyDb() {
+  return {
+    users: [],
+    students: [],
+    teachers: [],
+    groups: [{ id: "default", title: "Основная группа", teacherId: null, studentIds: [] }],
+    progress: {},
+    homework: [],
+    submissions: []
+  };
+}
+
+function readDb() {
+  try {
+    const db = { ...createEmptyDb(), ...JSON.parse(localStorage.getItem(AUTH_DB_KEY)) };
+    if (!Array.isArray(db.homework)) db.homework = [];
+    return ensureTeacherAccount(db);
+  } catch {
+    return ensureTeacherAccount(createEmptyDb());
+  }
+}
+
+function writeDb(db) {
+  localStorage.setItem(AUTH_DB_KEY, JSON.stringify(db));
+}
+
+function ensureTeacherAccount(db) {
+  const existing = db.users.find((user) => user.login === TEACHER_LOGIN);
+  if (existing) return db;
+  const now = new Date().toISOString();
+  const user = {
+    id: "teacher-main",
+    role: "teacher",
+    name: "Учитель",
+    login: TEACHER_LOGIN,
+    password: TEACHER_PASSWORD,
+    deviceId: "teacher",
+    createdAt: now,
+    updatedAt: now
+  };
+  db.users.push(user);
+  db.teachers.push({ id: "teacher-main-profile", userId: user.id, groupIds: ["default"], createdAt: now });
+  db.groups[0].teacherId = user.id;
+  return db;
+}
+
+function normalizeLogin(value) {
+  return value.trim().toLowerCase();
+}
+
+function isValidEmail(value) {
+  return EMAIL_PATTERN.test(value);
+}
+
+function setAuthMode(mode) {
+  state.authMode = mode === "register" ? "register" : "login";
+  const isRegister = state.authMode === "register";
+  nodes.authCardTitle.textContent = isRegister ? "Регистрация" : "Вход";
+  nodes.screenTitle.textContent = isRegister ? "Регистрация" : "Вход";
+  nodes.studentNameRow.classList.toggle("is-hidden", !isRegister);
+  nodes.registerButton.classList.toggle("is-hidden", !isRegister);
+  nodes.accessSubmitButton.classList.toggle("is-hidden", isRegister);
+  nodes.accessCodeInput.autocomplete = isRegister ? "new-password" : "current-password";
+  nodes.authLoginModeButton.classList.toggle("is-active", !isRegister);
+  nodes.authRegisterModeButton.classList.toggle("is-active", isRegister);
+  nodes.authLoginModeButton.setAttribute("aria-selected", String(!isRegister));
+  nodes.authRegisterModeButton.setAttribute("aria-selected", String(isRegister));
+  nodes.accessError.textContent = "";
+}
+
+function setPasswordVisible(isVisible) {
+  nodes.accessCodeInput.type = isVisible ? "text" : "password";
+  nodes.passwordToggleButton.classList.toggle("is-active", isVisible);
+  nodes.passwordToggleButton.setAttribute("aria-label", isVisible ? "Скрыть пароль" : "Показать пароль");
+  nodes.passwordToggleButton.title = isVisible ? "Скрыть пароль" : "Показать пароль";
+}
+
+function showCloudAccessError(error, retryAction) {
+  const message = error?.message || "Не удалось подключиться";
+  const isNetworkError = /failed to fetch|network|load failed/i.test(message);
+  nodes.accessError.innerHTML = "";
+  const text = document.createElement("span");
+  text.textContent = isNetworkError
+    ? "База временно запускается. Данные сохранены, попробуйте подключиться ещё раз."
+    : message;
+  nodes.accessError.appendChild(text);
+  if (!isNetworkError) return;
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "compact-button access-retry";
+  retry.textContent = "Повторить подключение";
+  retry.addEventListener("click", retryAction);
+  nodes.accessError.appendChild(retry);
+}
+
+function makeId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function loadAccess() {
+  try {
+    const access = JSON.parse(localStorage.getItem(ACCESS_KEY)) || null;
+    if (!access?.id || !access?.login) return null;
+    return access;
+  } catch {
+    return null;
+  }
+}
+
+function saveAccess(access) {
+  state.access = access;
+  localStorage.setItem(ACCESS_KEY, JSON.stringify(access));
+  state.progress = loadProgress(access);
+}
+
+function clearAccess() {
+  state.access = null;
+  state.progress = {};
+  localStorage.removeItem(ACCESS_KEY);
+  if (cloudStore) cloudStore.signOut().catch((error) => console.warn("Cloud sign out failed", error));
+}
+
+function loadSubmissions() {
+  try {
+    return readDb().submissions || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSubmissions(submissions) {
+  const db = readDb();
+  db.submissions = submissions;
+  writeDb(db);
+}
+
+function isTeacher() {
+  return state.access?.role === "teacher";
+}
+
+async function refreshCloudData() {
+  if (!cloudStore || !state.access?.id) return;
+  try {
+    const [progress, homework] = await Promise.all([
+      cloudStore.loadProgress(state.access.id),
+      cloudStore.loadHomework(state.access)
+    ]);
+    state.progress = progress || {};
+    state.cloudHomework = homework || [];
+    if (isTeacher()) {
+      const [students, memberships, submissions] = await Promise.all([
+        cloudStore.loadStudents(),
+        cloudStore.loadStudentMemberships(),
+        cloudStore.loadSubmissions()
+      ]);
+      state.cloudStudents = students || [];
+      state.cloudStudentMemberships = memberships || [];
+      state.cloudSubmissions = submissions || [];
+    }
+    state.cloudError = "";
+  } catch (error) {
+    state.cloudError = error.message || "Не удалось загрузить данные из Supabase.";
+    console.warn("Cloud sync failed", error);
+  }
+}
+
+function homeworkForVariant(variant) {
+  return homeworkItems().find((item) => item.variant_id === variant.id || item.variantId === variant.id) || null;
+}
+
+function homeworkItems() {
+  return cloudStore ? state.cloudHomework : readDb().homework;
+}
+
+function homeworkTitle(item) {
+  return `${item.subject_title || item.subjectTitle} · ${item.source_title || item.sourceTitle} · ${item.variant_title || item.variantTitle}`;
+}
+
+function isHomeworkVariant(variant) {
+  return Boolean(homeworkForVariant(variant));
+}
+
+function isControlLocked(variant) {
+  return isHomeworkVariant(variant) && !isTeacher() && Boolean(variantProgress(variant).completed);
+}
+
+function assignHomework(variant) {
+  if (!isTeacher()) return;
+  state.variantNotice = "";
+  if (cloudStore) {
+    cloudStore.assignHomework({
+      subjectId: state.subjectId,
+      sourceId: state.sourceId,
+      variantId: variant.id,
+      subjectTitle: currentSubject().title,
+      sourceTitle: currentSource().title,
+      variantTitle: variant.title,
+      assignedBy: state.access.id
+    }).then(refreshCloudData).then(() => {
+      state.variantNotice = "";
+      renderVariants();
+    }).catch((error) => {
+      state.variantNotice = `Supabase: ${error.message || "не удалось добавить ДЗ"}`;
+      renderVariants();
+    });
+    return;
+  }
+  const db = readDb();
+  if (db.homework.some((item) => item.variantId === variant.id)) return;
+  db.homework.push({
+    id: makeId("homework"),
+    subjectId: state.subjectId,
+    sourceId: state.sourceId,
+    variantId: variant.id,
+    subjectTitle: currentSubject().title,
+    sourceTitle: currentSource().title,
+    variantTitle: variant.title,
+    assignedBy: state.access.id,
+    createdAt: new Date().toISOString()
+  });
+  writeDb(db);
+}
+
+function removeHomework(variant) {
+  if (!isTeacher()) return;
+  const homework = homeworkForVariant(variant);
+  if (!homework) return;
+  state.variantNotice = "";
+  if (cloudStore) {
+    cloudStore.removeHomework({
+      homeworkId: homework.id,
+      variantId: variant.id
+    }).then(refreshCloudData).then(() => {
+      state.variantNotice = "";
+      renderVariants();
+    }).catch((error) => {
+      state.variantNotice = `Supabase: ${error.message || "не удалось убрать ДЗ"}`;
+      renderVariants();
+    });
+    return;
+  }
+  const db = readDb();
+  db.homework = db.homework.filter((item) => item.variantId !== variant.id);
+  writeDb(db);
+}
+
+function toggleHomework(variant) {
+  if (homeworkForVariant(variant)) removeHomework(variant);
+  else assignHomework(variant);
+}
+
+async function registerAccount() {
+  const name = nodes.studentNameInput.value.trim();
+  const login = normalizeLogin(nodes.loginInput.value);
+  const password = nodes.accessCodeInput.value.trim();
+  const role = "student";
+  nodes.accessError.textContent = "";
+
+  if (!name || !isValidEmail(login) || password.length < 4) {
+    nodes.accessError.textContent = "Введите имя, email и пароль минимум из 4 символов.";
+    return;
+  }
+
+  if (cloudStore) {
+    try {
+      const access = await cloudStore.registerStudent({ name, login, password });
+      saveAccess(access);
+      await refreshCloudData();
+      show("subjects");
+      return;
+    } catch (error) {
+      showCloudAccessError(error, registerAccount);
+      return;
+    }
+  }
+
+  const db = readDb();
+  if (db.users.some((user) => user.login === login)) {
+    nodes.accessError.textContent = "Такой логин уже зарегистрирован. Используйте вход.";
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const user = {
+    id: makeId("user"),
+    role,
+    name,
+    login,
+    password,
+    deviceId: getDeviceId(),
+    createdAt: now,
+    updatedAt: now
+  };
+  db.users.push(user);
+  db.students.push({ id: makeId("student"), userId: user.id, groupId: "default", createdAt: now });
+  db.groups[0].studentIds = [...new Set([...(db.groups[0].studentIds || []), user.id])];
+  writeDb(db);
+  saveAccess(publicUser(user));
+  show("subjects");
+}
+
+async function loginWithAccess() {
+  const login = normalizeLogin(nodes.loginInput.value);
+  const password = nodes.accessCodeInput.value.trim();
+  nodes.accessError.textContent = "";
+
+  if (!login || !password) {
+    nodes.accessError.textContent = "Введите email и пароль.";
+    return;
+  }
+
+  if (cloudStore) {
+    try {
+      const access = await cloudStore.signIn({ login, password });
+      saveAccess(access);
+      await refreshCloudData();
+      show("subjects");
+      return;
+    } catch (error) {
+      showCloudAccessError(error, loginWithAccess);
+      return;
+    }
+  }
+
+  const user = readDb().users.find((item) => item.login === login && item.password === password);
+  if (!user) {
+    nodes.accessError.textContent = "Пользователь не найден или пароль неверный.";
+    return;
+  }
+  saveAccess(publicUser(user));
+  show("subjects");
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    role: user.role,
+    name: user.name,
+    login: user.login,
+    deviceId: getDeviceId(),
+    createdAt: user.createdAt
+  };
+}
+
+function single(text, options, correct, explanation) {
+  return { type: "single", text, options, correct, explanation };
+}
+
+function multi(text, options, correct, explanation) {
+  return { type: "multi", text, options, correct, explanation };
+}
+
+function match(text, left, right, correct, explanation) {
+  return { type: "match", text, left, right, correct, explanation };
+}
+
+function short(text, correct, explanation) {
+  return { type: "short", text, correct, explanation };
+}
+
+function digits(text, correct, explanation) {
+  return { type: "digits", text, correct, explanation };
+}
+
+function withImage(question, image, alt) {
+  return { ...question, image, alt };
+}
+
+function assetUrl(src) {
+  if (!src || src.startsWith("data:") || /^https?:\/\//.test(src)) return src;
+  const separator = src.includes("?") ? "&" : "?";
+  return `${src}${separator}v=${APP_VERSION}`;
+}
+
+function socialQuestions() {
+  return [
+    multi("Ниже приведен перечень действий. Все они, за исключением двух, относятся к правам налогоплательщика в РФ. Найдите два лишних действия.", ["Получать информацию о налогах", "Использовать налоговые льготы", "Вести учет доходов и расходов", "Требовать соблюдения налоговой тайны", "Уплачивать законно установленные налоги"], [2, 4], "Права налогоплательщика не совпадают с его обязанностями: учет и уплата налогов относятся к обязанностям."),
+    multi("Выберите верные суждения о человеке.", ["Становление человека как личности связано с социализацией", "Человек наследует моральные нормы генетически", "Биологические предпосылки могут проявиться в социальных условиях", "Индивидом называют отдельного представителя человеческого рода", "Все способности человека формируются только биологически"], [0, 2, 3], "Личность формируется в обществе, но человек имеет и биологические предпосылки развития."),
+    match("Установите соответствие между примерами и видами потребностей человека.", ["В общении", "В приобретении новых знаний", "В пище", "В общественном признании", "В художественном творчестве"], ["Духовные", "Социальные", "Биологические"], [1, 0, 2, 1, 0], "Пища относится к биологическим потребностям, общение и признание к социальным, знания и творчество к духовным."),
+    multi("Какие признаки свидетельствуют о развитии страны как постиндустриального общества?", ["Развитие наукоемких технологий", "Переход к электронным производственным процессам", "Влияние природных факторов на общество", "Регулирование отношений моралью", "Высокая доля среднего класса"], [0, 1, 4], "Постиндустриальное общество связано с информацией, технологиями, услугами и сложной социальной структурой."),
+    multi("Выберите верные суждения о ценных бумагах.", ["Акция закрепляет долю в капитале компании", "Обращение ценных бумаг может осуществляться на фондовом рынке", "К ценным бумагам относят акцию, вексель и облигацию", "Все ценные бумаги являются долговыми", "Выпуск ценных бумаг называется девальвацией"], [0, 1, 2], "Акции и облигации обращаются на фондовом рынке, но не все бумаги долговые; девальвация относится к валюте."),
+    match("Установите соответствие между характеристиками и факторами производства.", ["Физические и интеллектуальные усилия людей", "Все виды природных ресурсов", "Факторный доход - рента", "Факторный доход - заработная плата", "Факторный доход - прибыль"], ["Труд", "Земля", "Предпринимательские способности"], [0, 1, 1, 0, 2], "Труд приносит заработную плату, земля - ренту, предпринимательские способности - прибыль."),
+    single("Какой пример иллюстрирует социальный институт образования?", ["Проведение урока в школе", "Заключение договора купли-продажи", "Выпуск облигаций", "Назначение административного штрафа"], 0, "Школа и учебный процесс относятся к институту образования."),
+    multi("Выберите верные суждения о семье.", ["Семья является агентом первичной социализации", "Семья выполняет воспитательную функцию", "Семья всегда создается только религиозным обрядом", "Семья может быть малой социальной группой", "Нуклеарная семья обязательно включает три-четыре поколения"], [0, 1, 3], "Семья социализирует, воспитывает и может быть малой группой; остальные утверждения неверны."),
+    multi("Какие выводы можно сделать по диаграмме: 31% выбрали стабильность общества, 27% - долгосрочные планы, 19% - комфорт граждан, 18% - нарушители норм, 5% - другое?", ["Каждый третий указал стабильность общества", "Доля ответа «другое» наименьшая", "Сторонников стабильности больше, чем сторонников комфорта", "Более половины выбрали стабильность и долгосрочные планы вместе", "Нарушителей норм выбрали больше, чем комфорт граждан"], [0, 1, 2, 3], "31% примерно каждый третий; 5% - минимум; 31 больше 19; 31+27=58%."),
+    multi("Какие признаки позволяют сделать вывод о демократическом политическом режиме?", ["Права и свободы гарантированы законом", "Ветви власти независимы и уравновешивают друг друга", "Меньшинство имеет право на оппозицию", "Президент обладает неограниченными полномочиями", "Правительство разрабатывает бюджет"], [0, 1, 2], "Демократия предполагает гарантии прав, разделение властей и политический плюрализм."),
+    multi("Что относится к политическим правам гражданина РФ?", ["Участвовать в управлении делами государства", "Обращаться в органы государственной власти", "Избирать и быть избранным", "На личную неприкосновенность", "На охрану здоровья"], [0, 1, 2], "Политические права связаны с участием в публичной власти; личная неприкосновенность и охрана здоровья относятся к другим группам прав."),
+    match("Установите соответствие между вопросами ведения и субъектами власти РФ.", ["Оборона и безопасность", "Государственные награды", "Воспитание и образование", "Охрана окружающей среды", "Федеральная собственность"], ["Только федеральный центр", "Федеральный центр и субъекты РФ"], [0, 0, 1, 1, 0], "Оборона, награды и федеральная собственность находятся в ведении РФ; образование и экология - совместное ведение."),
+    multi("Выберите верные суждения о системе права.", ["Система права строится по объективным критериям", "Нормы права различаются только по содержанию", "Отрасль права объединяет однородные нормы", "Правовой институт регулирует участок однородных отношений", "Гражданское право относится к публичному праву"], [0, 2, 3], "Отрасль и институт права выделяются по предмету регулирования; гражданское право относится к частному праву."),
+    match("Соотнесите организационно-правовые формы и виды юридических лиц.", ["Хозяйственные товарищества", "Государственные унитарные предприятия", "Потребительские кооперативы", "Благотворительные фонды", "Религиозные организации"], ["Коммерческие", "Некоммерческие"], [0, 0, 1, 1, 1], "Коммерческие организации создаются для извлечения прибыли; фонды, кооперативы и религиозные организации в этих примерах некоммерческие."),
+    multi("Гражданину России 12 лет. Какие действия он может совершать самостоятельно?", ["Совершать мелкие бытовые сделки", "Распоряжаться предоставленными родителями средствами", "Вносить вклады и распоряжаться ими", "Заключать трудовой договор курьером", "Зарегистрировать юридическое лицо"], [0, 1], "Малолетние 6-14 лет могут совершать мелкие бытовые сделки и распоряжаться средствами, предоставленными законными представителями."),
+    single("Что является признаком юридической ответственности?", ["Государственное принуждение", "Только моральное осуждение", "Добровольная похвала", "Отсутствие санкций"], 0, "Юридическая ответственность обеспечивается государственным принуждением и наступает за правонарушение.")
+  ];
+}
+
+function personalKotovaLiskovaFirstScan() {
+  return [
+    multi("Найдите два действия, которые выпадают из перечня прав налогоплательщика в РФ.", ["Уплачивать законно установленные налоги", "Вести учет доходов и расходов", "Получать от налоговых органов бесплатную информацию о действующих налогах", "Получать своевременный зачет или возврат излишне уплаченных сумм", "Использовать налоговые льготы", "Требовать соблюдения налоговой тайны"], [0, 1], "Два лишних пункта являются обязанностями налогоплательщика. Остальные пункты относятся к его правам."),
+    multi("Выберите верные суждения о человеке.", ["Последовательность основных стадий жизни человека биологически обусловлена", "Становление человека как личности связано с приобретением социальных черт и качеств", "Человек генетически наследует моральные нормы", "Влияние генетических факторов на способности выражает социальную сущность человека", "Природная предрасположенность человека может проявиться в социальных обстоятельствах"], [0, 1, 4], "Биологическое развитие задает возрастные стадии, личность формируется в обществе, а природные задатки раскрываются в социальных условиях. Моральные нормы не наследуются генетически."),
+    match("Установите соответствие между примерами и видами потребностей человека.", ["В общении", "В приобретении новых знаний", "В пище", "В общественном признании", "В художественном творчестве"], ["Духовные", "Социальные", "Биологические"], [1, 0, 2, 1, 0], "Общение и признание относятся к социальным потребностям, знания и творчество - к духовным, пища - к биологическим.")
+    ,
+    multi("Какие признаки свидетельствуют о развитии страны как постиндустриального общества?", ["Развитие получают наукоемкие, ресурсосберегающие технологии", "Осуществляется переход к электронным технологиям на всех уровнях производства", "Природные факторы оказывают влияние на развитие общества", "Общественные отношения регулируются правовыми и моральными нормами", "В структуре населения высок удельный вес среднего класса", "Преобладают экстенсивные методы ведения хозяйства"], [0, 1, 4], "Постиндустриальное общество связано с наукоемкими технологиями, информатизацией и развитым средним классом."),
+    multi("Выберите верные суждения о ценных бумагах.", ["Облигация дает владельцу право на долю в имуществе компании и дивиденды", "Обращение ценных бумаг осуществляется на фондовом рынке", "К ценным бумагам относят акцию, вексель, облигацию", "Различают долевые и долговые ценные бумаги", "Выпуск ценных бумаг называется девальвацией"], [1, 2, 3], "Первое утверждение описывает акцию, а девальвация связана со снижением курса валюты. Остальные суждения верны."),
+    match("Установите соответствие между характеристиками и факторами производства.", ["Деятельность людей по производству товаров и услуг с использованием физических и интеллектуальных возможностей", "Все виды природных ресурсов, пригодных для производства экономических благ", "Факторный доход - рента", "Факторный доход - заработная плата", "Факторный доход - прибыль"], ["Труд", "Земля", "Предпринимательские способности"], [0, 1, 1, 0, 2], "Труд приносит заработную плату, земля - ренту, предпринимательские способности - прибыль."),
+    multi("Какие признаки подтверждают наличие в стране рыночной экономики?", ["Каждый собственник факторов производства свободно распоряжается ими", "Производится широкий ассортимент товаров народного потребления", "Собственниками земли и предприятий являются частные лица и организации", "Правительство вкладывает значительные средства в строительство дорог", "В столице открыт новый международный аэропорт", "Наблюдается конкуренция производителей"], [0, 1, 2, 5], "Рыночную экономику показывают свобода распоряжения ресурсами, частная собственность, ассортимент товаров и конкуренция."),
+    multi("Выберите верные суждения о семье.", ["Рекреационная функция семьи проявляется в предоставлении социального статуса", "Члены семьи связаны взаимной моральной и правовой ответственностью", "Семья является основным агентом первичной социализации", "Семья создает условия для физического, психического, эмоционального и интеллектуального развития ребенка", "Нуклеарные семьи включают три-четыре поколения родственников"], [1, 2, 3], "Рекреационная функция связана с отдыхом и восстановлением, а нуклеарная семья обычно включает родителей и детей."),
+    withImage(multi("Найдите выводы, которые можно сделать на основе диаграммы об отношении подростков к социальным нормам.", ["Каждый третий опрошенный считает, что соблюдение норм обеспечивает комфорт граждан", "Тех, кто считает, что нарушителей норм всегда будет меньше, чем выбравших стабильность общества", "Сторонников комфорта больше, чем сторонников долгосрочных планов", "Более половины опрошенных выбрали стабильность общества и долгосрочные планы развития", "Наименьшая доля опрошенных ответила «Другое»"], [1, 3, 4], "По диаграмме: 31% - стабильность, 27% - долгосрочные планы, 19% - комфорт, 18% - нарушители, 5% - другое."), "./assets/social-diagram-q9.png", "Диаграмма с результатами опроса подростков о причинах соблюдения социальных норм."),
+    multi("Выберите верные суждения о государстве и его функциях.", ["К внешним функциям государства относится определение общего направления экономического развития", "Государство обладает монопольным правом законно применять принуждение", "Природоохранные требования государства составляют основу экологической безопасности", "Государство создает нормативную и организационную основу деятельности органов власти и местного самоуправления", "Основополагающим признаком государства любого типа является разделение властей"], [1, 2, 3], "Экономическое развитие относится к внутренним функциям, а разделение властей характерно не для любого государства."),
+    multi("Какие признаки позволяют сделать вывод о демократическом политическом режиме?", ["Президент обладает широкими полномочиями", "Меньшинство имеет право на оппозицию при подчинении решениям большинства", "Правительство разрабатывает и исполняет бюджет", "В стране действует конституция", "Права и свободы граждан гарантированы и защищены законом", "Ветви государственной власти независимы и уравновешивают друг друга"], [1, 4, 5], "Демократию показывают права оппозиции, гарантии прав человека и разделение властей."),
+    multi("Что относится к политическим правам гражданина РФ?", ["Право участвовать в управлении делами государства", "Право на свободу и личную неприкосновенность", "Право на личную и семейную тайну", "Право свободно передвигаться и выбирать место пребывания", "Право обращаться в органы государственной власти"], [0, 4], "Участие в управлении государством и обращения в органы власти относятся к политическим правам."),
+    match("Установите соответствие между вопросами и субъектами власти РФ, к ведению которых они относятся.", ["Охрана окружающей среды и обеспечение экологической безопасности", "Вопросы войны и мира", "Государственные награды и почетные звания РФ", "Оборона и безопасность", "Осуществление мер по борьбе с природными и техногенными катастрофами"], ["Только федеральный центр", "Федеральный центр и субъекты РФ"], [1, 0, 0, 0, 1], "Экология и борьба с катастрофами относятся к совместному ведению; война, награды и оборона - к федеральному."),
+    multi("Выберите верные суждения о системе права.", ["Система права строится по объективным критериям", "Нормы права различаются только по содержанию", "Отрасль права - совокупность однородных правовых норм", "Правовой институт - совокупность норм, регулирующих определенный участок однородных отношений", "Гражданское право относят к публичному праву"], [0, 2, 3], "Гражданское право относится к частному праву, а нормы различаются не только по содержанию."),
+    match("Установите соответствие между организационно-правовыми формами и видами юридических лиц.", ["Хозяйственные товарищества", "Государственные унитарные предприятия", "Потребительские кооперативы", "Благотворительные фонды", "Религиозные организации"], ["Коммерческие", "Некоммерческие"], [0, 0, 1, 1, 1], "Хозяйственные товарищества и унитарные предприятия являются коммерческими, остальные позиции здесь относятся к некоммерческим."),
+    multi("Гражданину России 12 лет. Какие действия соответствуют его правовому статусу?", ["Заключать трудовой договор курьером с согласия родителей", "Распоряжаться предоставленными родителями средствами", "Быть заслушанным в суде по определению места жительства при разводе родителей", "Вносить вклады в кредитные учреждения и распоряжаться ими", "Зарегистрировать на свое имя юридическое лицо", "Совершать мелкие бытовые сделки"], [1, 5], "В 12 лет ребенок может распоряжаться предоставленными средствами и совершать мелкие бытовые сделки. Остальные действия либо наступают позже, либо требуют иных условий.")
+  ];
+}
+
+function historyQuestions() {
+  return [
+    match("Установите соответствие между событиями и годами.", ["Крещение Руси", "Невская битва", "Куликовская битва", "Стояние на реке Угре"], ["988", "1240", "1380", "1480"], [0, 1, 2, 3], "В первой части истории часто проверяется хронология ключевых событий."),
+    match("Установите соответствие между правителем и событием.", ["Ярослав Мудрый", "Иван III", "Иван IV", "Петр I"], ["Русская Правда", "Стояние на Угре", "Опричнина", "Северная война"], [0, 1, 2, 3], "Каждый правитель связан с указанным событием или процессом."),
+    multi("Выберите события XVII века.", ["Соборное уложение", "Церковный раскол", "Смутное время", "Отмена крепостного права", "НЭП"], [0, 1, 2], "Смутное время, Соборное уложение и церковный раскол относятся к XVII веку."),
+    short("Запишите термин: высший орган управления, учрежденный Петром I в 1711 году.", ["сенат", "правительствующий сенат"], "Петр I учредил Правительствующий сенат в 1711 году."),
+    match("Расположите события в хронологической последовательности.", ["Ледовое побоище", "Куликовская битва", "Принятие Соборного уложения", "Отмена крепостного права"], ["1", "2", "3", "4"], [0, 1, 2, 3], "1242, 1380, 1649, 1861 - правильная последовательность."),
+    short("Запишите название мирного договора, завершившего Северную войну.", ["ништадтский", "ништадтский мир"], "Ништадтский мир 1721 года закрепил победу России в Северной войне."),
+    multi("Выберите реформы Петра I.", ["Учреждение Сената", "Введение Табели о рангах", "Создание коллегий", "Отмена крепостного права", "Земская реформа"], [0, 1, 2], "Сенат, Табель о рангах и коллегии относятся к петровским преобразованиям."),
+    single("Февральская революция привела к...", ["Падению монархии", "Созданию СССР", "Началу НЭПа", "Победе в Великой Отечественной войне"], 0, "В феврале 1917 года монархия в России была свергнута."),
+    match("Соотнесите термин и период.", ["НЭП", "Индустриализация", "Оттепель", "Перестройка"], ["1920-е", "1930-е", "1950-е-1960-е", "1980-е"], [0, 1, 2, 3], "Термины связаны с разными этапами советской истории."),
+    short("Запишите год распада СССР.", ["1991"], "СССР прекратил существование в декабре 1991 года."),
+    multi("Выберите события периода правления Александра II.", ["Отмена крепостного права", "Судебная реформа", "Земская реформа", "Учреждение Сената", "Введение НЭПа"], [0, 1, 2], "К реформам Александра II относятся крестьянская, судебная и земская реформы."),
+    match("Установите соответствие между войной и мирным договором.", ["Северная война", "Крымская война", "Русско-турецкая война 1877-1878 гг.", "Первая мировая война"], ["Ништадтский мир", "Парижский мир", "Берлинский трактат", "Брестский мир"], [0, 1, 2, 3], "Каждый договор завершал или фиксировал итоги соответствующей войны для России.")
+  ];
+}
+
+function rotate(items, amount) {
+  const shift = amount % items.length;
+  return [...items.slice(shift), ...items.slice(0, shift)];
+}
+
+function loadProgress(access = state?.access) {
+  if (access?.id) {
+    return readDb().progress?.[access.id] || {};
+  }
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveProgress() {
+  if (state.access?.id) {
+    if (cloudStore) {
+      Object.entries(state.progress).forEach(([variantId, data]) => {
+        cloudStore.saveVariantProgress(state.access.id, variantId, data).catch((error) => console.warn("Cloud progress save failed", error));
+      });
+    }
+    const db = readDb();
+    db.progress[state.access.id] = state.progress;
+    writeDb(db);
+    return;
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.progress));
+}
+
+function currentSubject() {
+  return subjects[state.subjectId];
+}
+
+function currentSource() {
+  return currentSubject().sources.find((item) => item.id === state.sourceId);
+}
+
+function currentVariant() {
+  return currentSource().variants[state.variantIndex];
+}
+
+function currentQuestion() {
+  return currentVariant().questions[state.questionIndex];
+}
+
+function isScanVariant(variant = currentVariant()) {
+  return Array.isArray(variant.pages);
+}
+
+function variantLength(variant) {
+  return isScanVariant(variant) ? variant.pages.length : variant.questions.length;
+}
+
+function variantProgress(variant = currentVariant()) {
+  if (!state.progress[variant.id]) {
+    state.progress[variant.id] = { completed: false, best: 0, attempts: [], answers: {}, skipped: {} };
+  }
+  const progress = state.progress[variant.id];
+  if (!progress.skipped) progress.skipped = {};
+  if (!Array.isArray(progress.attempts)) {
+    progress.attempts = progress.completed && !isScanVariant(variant)
+      ? [{ score: Number(progress.best) || countCorrect(variant, progress), total: variantLength(variant) }]
+      : [];
+  }
+  return progress;
+}
+
+function show(screen) {
+  if (screen === "result" && state.screen !== "result") state.reviewOpen = false;
+  state.screen = screen;
+  Object.entries(nodes.screens).forEach(([name, node]) => node.classList.toggle("is-hidden", name !== screen));
+  nodes.backButton.classList.toggle("is-hidden", screen === "access" || (screen === "subjects" && !state.examType));
+  nodes.hero.classList.toggle("is-hidden", screen === "access" || screen === "exam" || screen === "result" || screen === "scan" || screen === "image" || screen === "teacher" || screen === "teacherReview" || screen === "dashboard");
+  render();
+}
+
+function render() {
+  renderStats();
+  renderSourceNote();
+  if (state.screen === "access") renderAccess();
+  if (state.screen === "subjects") renderSubjects();
+  if (state.screen === "sources") renderSources();
+  if (state.screen === "variants") renderVariants();
+  if (state.screen === "exam") renderExam();
+  if (state.screen === "result") renderResult();
+  if (state.screen === "scan") renderScan();
+  if (state.screen === "teacher") renderTeacher();
+  if (state.screen === "teacherReview") renderTeacherReview();
+  if (state.screen === "dashboard") renderDashboard();
+}
+
+function renderAccess() {
+  nodes.eyebrow.textContent = "ЕГЭ и ОГЭ · аккаунт";
+  setAuthMode(state.authMode);
+}
+
+function renderSubjects() {
+  nodes.eyebrow.textContent = state.examType ? `${state.examType.toUpperCase() === "OGE" ? "ОГЭ" : "ЕГЭ"} · первая часть` : "Подготовка к экзаменам";
+  nodes.screenTitle.textContent = state.examType ? "Выбор предмета" : "ЕГЭ и ОГЭ";
+  nodes.backButton.classList.toggle("is-hidden", !state.examType);
+  nodes.subjectList.innerHTML = "";
+  if (isTeacher()) {
+    const teacherCard = document.createElement("button");
+    teacherCard.className = "card teacher-entry";
+    teacherCard.type = "button";
+    teacherCard.innerHTML = `<div><strong>Кабинет учителя</strong><span>Ученики, результаты и варианты для ДЗ</span><div class="badge-line"><b class="badge">${homeworkItems().length} в ДЗ</b></div></div><i>›</i>`;
+    teacherCard.addEventListener("click", () => show("teacher"));
+    nodes.subjectList.appendChild(teacherCard);
+  } else {
+    const dashboardCard = document.createElement("button");
+    dashboardCard.className = "card dashboard-entry";
+    dashboardCard.type = "button";
+    dashboardCard.innerHTML = `<div><strong>Моя успеваемость</strong><span>Результаты, динамика и последние попытки</span></div><i>›</i>`;
+    dashboardCard.addEventListener("click", () => {
+      state.dashboardStudent = null;
+      show("dashboard");
+    });
+    nodes.subjectList.appendChild(dashboardCard);
+  }
+  if (!state.examType) {
+    for (const [examType, title, subtitle] of [["ege", "ЕГЭ", "11 класс"], ["oge", "ОГЭ", "9 класс"]]) {
+      const card = document.createElement("button");
+      card.className = "card exam-entry";
+      card.type = "button";
+      card.innerHTML = `<div><strong>${title}</strong><span>${subtitle}</span></div><i>›</i>`;
+      card.addEventListener("click", () => {
+        state.examType = examType;
+        state.subjectId = null;
+        show("subjects");
+      });
+      nodes.subjectList.appendChild(card);
+    }
+  }
+  Object.entries(subjects).filter(([, subject]) => state.examType && (subject.examType || "ege") === state.examType).forEach(([id, subject]) => {
+    const completed = subject.sources.flatMap((sourceItem) => sourceItem.variants).filter((variant) => variantProgress(variant).completed).length;
+    const card = document.createElement("button");
+    card.className = "card";
+    card.type = "button";
+    card.innerHTML = `<div><strong>${subject.title}</strong><span>${subject.subtitle}</span><div class="badge-line"><b class="badge">${completed} завершено</b><b class="badge">ФИПИ</b></div></div><i>›</i>`;
+    card.addEventListener("click", () => {
+      state.subjectId = id;
+      show("sources");
+    });
+    nodes.subjectList.appendChild(card);
+  });
+  const accountCard = document.createElement("button");
+  accountCard.className = "card";
+  accountCard.type = "button";
+  accountCard.innerHTML = `<div><strong>${state.access.name}</strong><span>${isTeacher() ? "Учитель" : "Ученик"} · ${state.access.login}</span><div class="badge-line"><b class="badge">выйти</b></div></div><i>×</i>`;
+  accountCard.addEventListener("click", () => {
+    clearAccess();
+    state.examType = null;
+    nodes.studentNameInput.value = "";
+    nodes.loginInput.value = "";
+    nodes.accessCodeInput.value = "";
+    setPasswordVisible(false);
+    show("access");
+  });
+  nodes.subjectList.appendChild(accountCard);
+}
+
+function renderSources() {
+  nodes.eyebrow.textContent = currentSubject().title;
+  nodes.screenTitle.textContent = "Источник";
+  nodes.sourceList.innerHTML = "";
+  currentSubject().sources.forEach((sourceItem) => {
+    const completed = sourceItem.variants.filter((variant) => hasRecordedResult(variant, variantProgress(variant))).length;
+    const card = document.createElement("button");
+    card.className = "card";
+    card.type = "button";
+    card.innerHTML = `<div><strong>${sourceItem.title}</strong><span>${sourceItem.description}</span><div class="badge-line"><b class="badge">${sourceItem.year}</b><b class="badge">${completed}/${sourceItem.variants.length}</b></div></div><i>›</i>`;
+    card.addEventListener("click", () => {
+      state.sourceId = sourceItem.id;
+      state.variantIndex = 0;
+      show("variants");
+    });
+    nodes.sourceList.appendChild(card);
+  });
+}
+
+function renderVariants() {
+  nodes.eyebrow.textContent = currentSource().authorLine || currentSource().title;
+  nodes.screenTitle.textContent = "Варианты";
+  nodes.variantList.innerHTML = "";
+  if (state.variantNotice) {
+    const notice = document.createElement("p");
+    notice.className = "inline-notice";
+    notice.textContent = state.variantNotice;
+    nodes.variantList.appendChild(notice);
+  }
+  currentSource().variants.forEach((variant, index) => {
+    const progress = variantProgress(variant);
+    const answered = Object.keys(progress.answers).length;
+    const length = variantLength(variant);
+    const latest = latestAttempt(progress);
+    const hasResult = hasRecordedResult(variant, progress);
+    const statusText = isScanVariant(variant)
+      ? `${length} ${pageWord(length)} первой части`
+      : progress.completed && latest
+        ? `Результат: ${latest.score}/${latest.total}`
+        : `${answered}/${length} заданий`;
+    const homework = homeworkForVariant(variant);
+    const locked = isControlLocked(variant);
+    const card = document.createElement("article");
+    card.className = `variant-card${locked ? " is-locked" : ""}`;
+    const title = latest && !isScanVariant(variant) ? `${variant.title} <span class="variant-score">(${latest.score}/${latest.total})</span>` : variant.title;
+    const actionLabel = locked
+      ? "попытка завершена"
+      : hasResult
+        ? (isScanVariant(variant) ? "решен" : `лучший ${progress.best}/${length}`)
+        : "не завершен";
+    const completion = isScanVariant(variant) ? (progress.completed ? 100 : 0) : answered / length * 100;
+    const cardBody = `<div><strong>${title}</strong><span>${statusText}</span><div class="progress-track"><div class="progress-fill" style="width:${completion}%"></div></div><div class="badge-line">${homework ? "<b class=\"badge\">ДЗ</b>" : ""}<b class="badge">${actionLabel}</b>${latest && progress.attempts.length > 1 ? `<b class="badge">попыток ${progress.attempts.length}</b>` : ""}</div></div>`;
+    if (isTeacher()) {
+      card.innerHTML = `<button class="variant-open" type="button">${cardBody}</button><button class="variant-action" type="button" aria-label="${homework ? "Убрать из ДЗ" : "Добавить в ДЗ"}" title="${homework ? "Убрать из ДЗ" : "Добавить в ДЗ"}">${homework ? "−" : "+"}</button>`;
+      card.querySelector(".variant-open").addEventListener("click", () => openVariant(index, variant, progress));
+      card.querySelector(".variant-action").addEventListener("click", () => {
+        toggleHomework(variant);
+        renderVariants();
+      });
+    } else {
+      const canRetry = progress.completed && !locked && !isScanVariant(variant);
+      card.classList.toggle("has-retry", canRetry);
+      card.innerHTML = `<button class="variant-open" type="button"${locked ? " disabled" : ""}>${cardBody}<i>${locked ? "✓" : "›"}</i></button>${canRetry ? '<button class="variant-retry" type="button">Решить ещё раз</button>' : ""}`;
+      card.querySelector(".variant-open").addEventListener("click", () => openVariant(index, variant, progress));
+      card.querySelector(".variant-retry")?.addEventListener("click", () => {
+        state.variantIndex = index;
+        restartCurrentVariant();
+      });
+    }
+    nodes.variantList.appendChild(card);
+  });
+}
+
+function openVariant(index, variant, progress) {
+  if (isControlLocked(variant)) return;
+  state.variantIndex = index;
+  if (isScanVariant(variant)) {
+    show("scan");
+    return;
+  }
+  const next = variant.questions.findIndex((_, questionIndex) => !progress.answers[questionIndex]);
+  state.questionIndex = next === -1 ? 0 : next;
+  clearDraft();
+  show(progress.completed && next === -1 ? "result" : "exam");
+}
+
+function pageWord(count) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return "страница";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "страницы";
+  return "страниц";
+}
+
+function renderScan() {
+  const variant = currentVariant();
+  const progress = variantProgress();
+  nodes.eyebrow.textContent = currentSource().title;
+  nodes.screenTitle.textContent = variant.title;
+  nodes.scanMeta.textContent = progress.completed ? "Отмечен как решенный" : "Первая часть, страницы варианта";
+  nodes.scanCount.textContent = `${variant.pages.length} стр.`;
+  nodes.scanPages.innerHTML = "";
+  variant.pages.forEach((page, index) => {
+    const figure = document.createElement("figure");
+    figure.className = "scan-page";
+    figure.innerHTML = `<figcaption>${variant.title} · стр. ${index + 1}</figcaption><img src="${page}" alt="${variant.title}, страница ${index + 1}" loading="lazy">`;
+    nodes.scanPages.appendChild(figure);
+  });
+}
+
+function renderExam() {
+  const variant = currentVariant();
+  const progress = variantProgress();
+  const homework = homeworkForVariant(variant);
+  const question = currentQuestion();
+  const answered = Object.keys(progress.answers).length;
+  const skipped = Object.keys(progress.skipped).filter((index) => !progress.answers[index]).length;
+  loadDraftFromSaved();
+  nodes.eyebrow.textContent = currentSource().title;
+  nodes.screenTitle.textContent = variant.title;
+  nodes.variantMeta.textContent = homework ? "Домашнее задание · одна попытка" : skipped ? `Ответы не проверяются до конца · пропущено ${skipped}` : "Ответы не проверяются до конца варианта";
+  nodes.questionCount.textContent = `${state.questionIndex + 1}/${variant.questions.length}`;
+  nodes.variantProgress.style.width = `${answered / variant.questions.length * 100}%`;
+  nodes.taskType.textContent = taskTypeLabel(question);
+  nodes.questionTitle.textContent = question.text;
+  nodes.nextButton.textContent = state.questionIndex === variant.questions.length - 1 ? "Завершить" : "Дальше";
+  nodes.nextButton.disabled = !hasAnswer(question);
+  nodes.restartVariantButton.disabled = Boolean(homework) && !isTeacher();
+  renderQuestionNav(variant, progress);
+  renderQuestionInput(question);
+}
+
+function renderQuestionNav(variant, progress) {
+  nodes.questionNav.innerHTML = "";
+  variant.questions.forEach((_, index) => {
+    const button = document.createElement("button");
+    const answered = Boolean(progress.answers[index]);
+    const skipped = Boolean(progress.skipped[index]) && !answered;
+    button.className = [
+      "question-pill",
+      index === state.questionIndex ? "is-current" : "",
+      answered ? "is-done" : "",
+      skipped ? "is-skipped" : ""
+    ].filter(Boolean).join(" ");
+    button.type = "button";
+    button.textContent = index + 1;
+    button.setAttribute("aria-label", `Задание ${index + 1}`);
+    button.addEventListener("click", () => goToQuestion(index));
+    nodes.questionNav.appendChild(button);
+  });
+}
+
+function renderQuestionInput(question) {
+  nodes.options.innerHTML = "";
+  if (question.context) {
+    const context = document.createElement("div");
+    context.className = "task-context";
+    question.context.forEach((text) => {
+      const paragraph = document.createElement("p");
+      paragraph.textContent = text;
+      context.appendChild(paragraph);
+    });
+    nodes.options.appendChild(context);
+  }
+  if (question.table) {
+    const data = question.table;
+    const wrapper = document.createElement("div");
+    wrapper.className = "task-table-wrap";
+    const table = document.createElement("table");
+    table.className = "task-table";
+    if (data.groups || (data.headers && data.headers.length > 4)) table.classList.add("is-wide");
+    if (data.groups) table.classList.add("is-grouped");
+    const caption = table.createCaption();
+    caption.textContent = data.caption;
+    const head = table.createTHead();
+    const groupRow = head.insertRow();
+    const label = document.createElement("th");
+    label.textContent = data.headers ? data.headers[0] : data.labelHeading;
+    label.rowSpan = data.headers ? 1 : 2;
+    label.scope = "col";
+    groupRow.appendChild(label);
+    if (data.headers) data.headers.slice(1).forEach((heading) => {
+      const cell = document.createElement("th");
+      cell.textContent = heading;
+      cell.scope = "col";
+      groupRow.appendChild(cell);
+    });
+    else {
+    data.groups.forEach((group) => {
+      const cell = document.createElement("th");
+      cell.textContent = group;
+      cell.colSpan = data.columns.length;
+      cell.scope = "colgroup";
+      groupRow.appendChild(cell);
+    });
+    const columnRow = head.insertRow();
+    data.groups.forEach(() => data.columns.forEach((column) => {
+      const cell = document.createElement("th");
+      cell.textContent = column;
+      cell.scope = "col";
+      columnRow.appendChild(cell);
+    }));
+    }
+    const body = table.createTBody();
+    data.rows.forEach(([name, ...values]) => {
+      const row = body.insertRow();
+      const heading = document.createElement("th");
+      heading.textContent = name;
+      heading.scope = "row";
+      row.appendChild(heading);
+      values.forEach((value) => { row.insertCell().textContent = value; });
+    });
+    wrapper.appendChild(table);
+    if (data.groups) appendGroupedTableCards(wrapper, data);
+    nodes.options.appendChild(wrapper);
+  }
+  if (question.image) {
+    const imageSrc = assetUrl(question.image);
+    const figure = document.createElement("figure");
+    figure.className = `task-media${question.isChart ? " is-chart" : ""}`;
+    figure.setAttribute("role", "button");
+    figure.setAttribute("tabindex", "0");
+    figure.setAttribute("aria-label", "Открыть материал крупно");
+    figure.innerHTML = `<img src="${imageSrc}" alt="${question.alt || ""}">`;
+    const openImage = () => {
+      nodes.viewerImage.src = imageSrc;
+      nodes.viewerImage.alt = question.alt || "";
+      nodes.eyebrow.textContent = `Задание ${state.questionIndex + 1}`;
+      nodes.screenTitle.textContent = "Материал";
+      show("image");
+    };
+    figure.addEventListener("click", openImage);
+    figure.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") openImage();
+    });
+    nodes.options.appendChild(figure);
+  }
+  if (question.type === "match") {
+    question.left.forEach((left, index) => {
+      const row = document.createElement("label");
+      row.className = "match-row";
+      const select = document.createElement("select");
+      select.innerHTML = `<option value="">Выбрать цифру</option>${question.right.map((right, rightIndex) => `<option value="${rightIndex}">${rightIndex + 1}. ${right}</option>`).join("")}`;
+      select.value = state.matching[index] ?? "";
+      select.addEventListener("change", () => {
+        state.matching[index] = select.value === "" ? "" : Number(select.value);
+        renderExam();
+      });
+      row.innerHTML = `<span>${letter(index)}) ${left}</span>`;
+      row.appendChild(select);
+      nodes.options.appendChild(row);
+    });
+    return;
+  }
+
+  if (question.type === "short" || question.type === "digits") {
+    const label = document.createElement("label");
+    label.className = "short-row";
+    label.innerHTML = "<span>Ответ</span>";
+    const input = document.createElement("input");
+    input.type = "text";
+    const numeric = question.type === "digits";
+    input.inputMode = numeric ? "numeric" : "text";
+    if (numeric) input.pattern = "[0-9]*";
+    input.placeholder = numeric ? "Введите цифры" : "Введите слово или цифры";
+    input.value = typeof state.selected === "string" ? state.selected : "";
+    input.addEventListener("input", () => {
+      if (numeric) input.value = input.value.replace(/[^0-9]/g, "");
+      state.selected = input.value;
+      nodes.nextButton.disabled = !hasAnswer(question);
+    });
+    label.appendChild(input);
+    nodes.options.appendChild(label);
+    return;
+  }
+
+  question.options.forEach((option, index) => {
+    const button = document.createElement("button");
+    const selected = question.type === "multi" ? state.selected.includes(index) : state.selected === index;
+    const numericOnly = question.image && /^\d+$/.test(String(option).trim());
+    button.className = `option${numericOnly ? " is-number-only" : ""}${selected ? " is-selected" : ""}`;
+    button.type = "button";
+    button.innerHTML = numericOnly
+      ? `<span class="option-marker">${index + 1}</span>`
+      : `<span class="option-marker">${index + 1}</span><span>${option}</span>`;
+    button.addEventListener("click", () => {
+      if (question.type === "multi") {
+        const set = new Set(state.selected);
+        set.has(index) ? set.delete(index) : set.add(index);
+        state.selected = [...set].sort((a, b) => a - b);
+      } else {
+        state.selected = index;
+      }
+      renderExam();
+    });
+    nodes.options.appendChild(button);
+  });
+}
+
+function renderResult() {
+  const variant = currentVariant();
+  const progress = variantProgress();
+  const homework = homeworkForVariant(variant);
+  const correct = countCorrect(variant, progress);
+  const mistakes = variantLength(variant) - correct;
+  nodes.eyebrow.textContent = currentSource().title;
+  nodes.screenTitle.textContent = "Итог";
+  nodes.resultMeta.textContent = `${currentSubject().title} · ${currentSource().year} · ${variant.title}`;
+  nodes.resultTitle.textContent = `${correct}/${variantLength(variant)}`;
+  nodes.resultText.textContent = mistakes === 0 ? "Вариант закрыт идеально." : `Ошибок: ${mistakes}. Можно открыть разбор проблемных заданий.`;
+  nodes.mistakesReviewButton.classList.toggle("is-hidden", mistakes === 0);
+  nodes.mistakesReviewButton.textContent = state.reviewOpen ? "Скрыть разбор" : "Разбор ошибок";
+  nodes.mistakesReviewButton.setAttribute("aria-expanded", String(state.reviewOpen));
+  nodes.reviewList.classList.toggle("is-hidden", !state.reviewOpen);
+  nodes.repeatButton.disabled = Boolean(homework) && !isTeacher();
+  nodes.repeatButton.textContent = homework && !isTeacher() ? "Попытка закрыта" : "Повторить";
+  nodes.reviewList.innerHTML = "";
+  variant.questions.forEach((question, index) => {
+    const answer = progress.answers[index];
+    if (isCorrect(question, answer)) return;
+    const item = document.createElement("article");
+    item.className = "review-item";
+    const title = document.createElement("strong");
+    title.textContent = `${index + 1}. ${question.text}`;
+    item.appendChild(title);
+    appendReviewQuestionDetails(item, question);
+    const userAnswer = document.createElement("span");
+    userAnswer.className = "review-answer is-user";
+    userAnswer.textContent = `Ответ ученика: ${formatAnswer(question, answer)}`;
+    const correctAnswer = document.createElement("span");
+    correctAnswer.className = "review-answer is-correct";
+    correctAnswer.textContent = `Правильно: ${formatCorrect(question)}`;
+    item.append(userAnswer, correctAnswer);
+    nodes.reviewList.appendChild(item);
+  });
+  if (!nodes.reviewList.children.length) {
+    const item = document.createElement("article");
+    item.className = "review-item";
+    item.innerHTML = "<strong>Ошибок нет</strong><p>Разбор пустой, потому что все ответы верные.</p>";
+    nodes.reviewList.appendChild(item);
+  }
+}
+
+function appendReviewQuestionDetails(item, question) {
+  if (question.context) {
+    const context = document.createElement("div");
+    context.className = "task-context review-context";
+    question.context.forEach((text) => {
+      const paragraph = document.createElement("p");
+      paragraph.textContent = text;
+      context.appendChild(paragraph);
+    });
+    item.appendChild(context);
+  }
+  if (question.table) {
+    const data = question.table;
+    const wrapper = document.createElement("div");
+    wrapper.className = "task-table-wrap review-table";
+    const table = document.createElement("table");
+    table.className = "task-table";
+    if (data.groups || (data.headers && data.headers.length > 4)) table.classList.add("is-wide");
+    if (data.groups) table.classList.add("is-grouped");
+    table.createCaption().textContent = data.caption;
+    const head = table.createTHead();
+    const groupRow = head.insertRow();
+    const label = document.createElement("th");
+    label.textContent = data.headers ? data.headers[0] : data.labelHeading;
+    label.rowSpan = data.headers ? 1 : 2;
+    label.scope = "col";
+    groupRow.appendChild(label);
+    if (data.headers) {
+      data.headers.slice(1).forEach((heading) => {
+        const cell = document.createElement("th");
+        cell.textContent = heading;
+        cell.scope = "col";
+        groupRow.appendChild(cell);
+      });
+    } else {
+      data.groups.forEach((group) => {
+        const cell = document.createElement("th");
+        cell.textContent = group;
+        cell.colSpan = data.columns.length;
+        cell.scope = "colgroup";
+        groupRow.appendChild(cell);
+      });
+      const columnRow = head.insertRow();
+      data.groups.forEach(() => data.columns.forEach((column) => {
+        const cell = document.createElement("th");
+        cell.textContent = column;
+        cell.scope = "col";
+        columnRow.appendChild(cell);
+      }));
+    }
+    const body = table.createTBody();
+    data.rows.forEach(([name, ...values]) => {
+      const row = body.insertRow();
+      const heading = document.createElement("th");
+      heading.textContent = name;
+      heading.scope = "row";
+      row.appendChild(heading);
+      values.forEach((value) => { row.insertCell().textContent = value; });
+    });
+    wrapper.appendChild(table);
+    if (data.groups) appendGroupedTableCards(wrapper, data);
+    item.appendChild(wrapper);
+  }
+  if (question.image) {
+    const figure = document.createElement("figure");
+    figure.className = `task-media review-media${question.isChart ? " is-chart" : ""}`;
+    const image = document.createElement("img");
+    image.src = assetUrl(question.image);
+    image.alt = question.alt || "Материал к заданию";
+    figure.appendChild(image);
+    item.appendChild(figure);
+  }
+  const options = document.createElement("div");
+  options.className = "review-options";
+  if (question.type === "match") {
+    question.left.forEach((text, index) => {
+      const row = document.createElement("p");
+      row.textContent = `${letter(index)}) ${text}`;
+      options.appendChild(row);
+    });
+    question.right.forEach((text, index) => {
+      const row = document.createElement("p");
+      row.className = "review-option";
+      row.textContent = `${index + 1}) ${text}`;
+      options.appendChild(row);
+    });
+  } else if (question.options) {
+    question.options.forEach((text, index) => {
+      const row = document.createElement("p");
+      row.className = "review-option";
+      row.textContent = `${index + 1}) ${text}`;
+      options.appendChild(row);
+    });
+  }
+  if (options.children.length) item.appendChild(options);
+}
+
+function appendGroupedTableCards(wrapper, data) {
+  const cards = document.createElement("div");
+  cards.className = "grouped-table-cards";
+  const caption = document.createElement("strong");
+  caption.className = "grouped-table-caption";
+  caption.textContent = data.caption;
+  cards.appendChild(caption);
+  data.rows.forEach(([label, ...values]) => {
+    const card = document.createElement("section");
+    card.className = "grouped-table-card";
+    const heading = document.createElement("strong");
+    heading.textContent = `${data.labelHeading}: ${label}`;
+    card.appendChild(heading);
+    data.groups.forEach((group, groupIndex) => {
+      const row = document.createElement("div");
+      const groupName = document.createElement("b");
+      groupName.textContent = group;
+      const details = document.createElement("span");
+      details.textContent = data.columns.map((column, columnIndex) => `${column}: ${values[groupIndex * data.columns.length + columnIndex]}`).join(" · ");
+      row.append(groupName, details);
+      card.appendChild(row);
+    });
+    cards.appendChild(card);
+  });
+  wrapper.appendChild(cards);
+}
+
+function renderStats() {
+  const values = Object.entries(state.progress).reduce((acc, [variantId, progress]) => {
+    const variant = findVariant(variantId);
+    if (!variant || !hasRecordedResult(variant, progress)) return acc;
+    if (isScanVariant(variant)) {
+      acc.done += 1;
+      return acc;
+    }
+    const correct = latestAttempt(progress)?.score ?? progress.best ?? 0;
+    acc.done += 1;
+    acc.correct += correct;
+    acc.total += variantLength(variant);
+    return acc;
+  }, { done: 0, correct: 0, total: 0 });
+  nodes.doneValue.textContent = String(values.done);
+  nodes.accuracyValue.textContent = values.total ? `${Math.round(values.correct / values.total * 100)}%` : "0%";
+}
+
+function renderSourceNote() {
+  if (!state.access) {
+    nodes.sourceNote.textContent = "Зарегистрируйтесь, чтобы прогресс сохранялся в аккаунте этого браузера. Следующий шаг - подключение Supabase.";
+    return;
+  }
+  const mode = isTeacher() ? "кабинет учителя" : "кабинет ученика";
+  nodes.sourceNote.textContent = `${state.access.name} · ${mode} · ${cloudStore ? "данные синхронизируются через Supabase" : "локальный режим"}.`;
+}
+
+function renderTeacherTools() {
+  const tools = document.createElement("div");
+  tools.className = "teacher-tools";
+  const search = document.createElement("input");
+  search.type = "search";
+  search.placeholder = "Поиск ученика";
+  search.value = state.teacherSearch;
+  search.addEventListener("input", () => {
+    state.teacherSearch = search.value;
+    renderTeacher();
+  });
+  const period = document.createElement("select");
+  period.setAttribute("aria-label", "Период результатов");
+  [["all", "Всё время"], ["week", "Неделя"], ["month", "Месяц"]].forEach(([value, label]) => period.add(new Option(label, value)));
+  period.value = state.teacherPeriod;
+  period.addEventListener("change", () => {
+    state.teacherPeriod = period.value;
+    renderTeacher();
+  });
+  const filter = document.createElement("select");
+  filter.setAttribute("aria-label", "Тип работы");
+  [["all", "Все работы"], ["homework", "Только ДЗ"], ["practice", "Самостоятельные"]].forEach(([value, label]) => filter.add(new Option(label, value)));
+  filter.value = state.teacherResultFilter;
+  filter.addEventListener("change", () => {
+    state.teacherResultFilter = filter.value;
+    renderTeacher();
+  });
+  const sort = document.createElement("select");
+  sort.setAttribute("aria-label", "Сортировка учеников");
+  [["name", "По имени"], ["average", "По результату"], ["dynamic", "По динамике"]].forEach(([value, label]) => sort.add(new Option(label, value)));
+  sort.value = state.teacherSort;
+  sort.addEventListener("change", () => {
+    state.teacherSort = sort.value;
+    renderTeacher();
+  });
+  const exportButton = document.createElement("button");
+  exportButton.type = "button";
+  exportButton.className = "compact-button";
+  exportButton.textContent = "Excel";
+  exportButton.title = "Скачать отчёт CSV для Excel";
+  exportButton.addEventListener("click", exportTeacherReport);
+  const printButton = document.createElement("button");
+  printButton.type = "button";
+  printButton.className = "compact-button";
+  printButton.textContent = "PDF";
+  printButton.title = "Открыть печать и сохранить как PDF";
+  printButton.addEventListener("click", () => window.print());
+  tools.append(search, period, filter, sort, exportButton, printButton);
+  nodes.teacherReport.appendChild(tools);
+}
+
+function periodStart(period) {
+  const now = new Date();
+  if (period === "week") return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+  if (period === "month") return new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+  return null;
+}
+
+function filteredTeacherSubmissions() {
+  const start = periodStart(state.teacherPeriod);
+  return (cloudStore ? state.cloudSubmissions : loadSubmissions()).filter((item) => {
+    const mode = item.attemptMode || item.attempt_mode;
+    const at = new Date(item.at || item.submitted_at || 0);
+    return (state.teacherResultFilter === "all" || mode === state.teacherResultFilter) && (!start || at >= start);
+  });
+}
+
+function exportTeacherReport() {
+  const studentById = new Map(state.cloudStudents.map((student) => [student.id, student]));
+  const rows = [["Ученик", "Email", "Вариант", "Режим", "Баллы", "Всего", "Дата"]];
+  filteredTeacherSubmissions().forEach((item) => {
+    const student = studentById.get(item.userId || item.user_id);
+    rows.push([
+      student?.name || "",
+      student?.login || "",
+      item.variantTitle || item.variant_title || "",
+      (item.attemptMode || item.attempt_mode) === "homework" ? "ДЗ" : "Самостоятельно",
+      item.score,
+      item.total,
+      item.at || item.submitted_at || ""
+    ]);
+  });
+  const csv = "\ufeff" + rows.map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `ege-report-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function renderTeacher() {
+  nodes.eyebrow.textContent = "ЕГЭ · админ";
+  nodes.screenTitle.textContent = "Учитель";
+  nodes.teacherStudentsTab.classList.toggle("is-active", state.teacherTab === "students");
+  nodes.teacherPerformanceTab.classList.toggle("is-active", state.teacherTab === "performance");
+  nodes.teacherSectionTitle.textContent = state.teacherTab === "performance" ? "Успеваемость" : "Ученики и домашние задания";
+  const db = readDb();
+  nodes.teacherReport.innerHTML = "";
+  if (state.cloudError) {
+    const warning = document.createElement("article");
+    warning.className = "review-item connection-state";
+    warning.innerHTML = "<strong>База временно недоступна</strong><span>Данные сохранены. Возможно, проект Supabase запускается.</span>";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "compact-button";
+    retry.textContent = "Повторить подключение";
+    retry.addEventListener("click", async () => {
+      retry.disabled = true;
+      retry.textContent = "Подключаюсь...";
+      await refreshCloudData();
+      renderTeacher();
+    });
+    warning.appendChild(retry);
+    nodes.teacherReport.appendChild(warning);
+  }
+  const loadedStudents = cloudStore
+    ? state.cloudStudents
+    : db.students.map((student) => db.users.find((user) => user.id === student.userId)).filter(Boolean);
+  renderTeacherTools();
+  const query = state.teacherSearch.trim().toLowerCase();
+  const allStudents = loadedStudents.filter((student) => !query || `${student.name} ${student.login}`.toLowerCase().includes(query));
+  if (state.teacherTab === "performance") {
+    renderTeacherPerformance(allStudents);
+    return;
+  }
+  const enrolledIds = new Set(cloudStore
+    ? state.cloudStudentMemberships.map((membership) => membership.student_id)
+    : allStudents.map((student) => student.id));
+  const activeStudents = allStudents.filter((student) => !student.hidden_from_teacher);
+  const visibleStudents = activeStudents.filter((student) => enrolledIds.has(student.id));
+  const listedStudentIds = new Set(allStudents.map((student) => student.id));
+  const submissions = (cloudStore ? state.cloudSubmissions : loadSubmissions())
+    .filter((submission) => enrolledIds.has(submission.userId || submission.user_id) && listedStudentIds.has(submission.userId || submission.user_id));
+  const selectedStudent = loadedStudents.find((student) => student.id === state.teacherStudentId);
+  if (selectedStudent) {
+    nodes.teacherSectionTitle.textContent = selectedStudent.name;
+    renderTeacherStudentFolder(selectedStudent, submissions.filter((submission) => (submission.userId || submission.user_id) === selectedStudent.id));
+    return;
+  }
+  if (cloudStore) {
+    const accounts = document.createElement("article");
+    accounts.className = "review-item teacher-accounts";
+    const title = document.createElement("strong");
+    const hiddenCount = allStudents.length - activeStudents.length;
+    title.textContent = `Аккаунты: ${activeStudents.length} · получают ДЗ: ${visibleStudents.length}`;
+    accounts.appendChild(title);
+    const note = document.createElement("span");
+    note.innerHTML = "Отключённые тренируются самостоятельно.<br>Скрытые не попадают в списки и успеваемость.";
+    accounts.appendChild(note);
+    const restoreRow = document.createElement("form");
+    restoreRow.className = "teacher-restore-row";
+    const restoreInput = document.createElement("input");
+    restoreInput.type = "email";
+    restoreInput.placeholder = "Email удалённого ученика";
+    restoreInput.setAttribute("aria-label", "Email удалённого ученика");
+    const restoreButton = document.createElement("button");
+    restoreButton.type = "submit";
+    restoreButton.textContent = "Вернуть";
+    restoreRow.append(restoreInput, restoreButton);
+    restoreRow.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const login = restoreInput.value.trim();
+      if (!EMAIL_PATTERN.test(login)) {
+        restoreInput.setCustomValidity("Введите корректный email");
+        restoreInput.reportValidity();
+        return;
+      }
+      restoreInput.setCustomValidity("");
+      restoreInput.disabled = true;
+      restoreButton.disabled = true;
+      restoreButton.textContent = "Возвращаю...";
+      try {
+        await cloudStore.restoreStudentToTeacher(login);
+        await refreshCloudData();
+        renderTeacher();
+      } catch (error) {
+        restoreInput.disabled = false;
+        restoreButton.disabled = false;
+        restoreButton.textContent = error.message || "Не найден";
+      }
+    });
+    accounts.appendChild(restoreRow);
+    if (hiddenCount) {
+      const hiddenToggle = document.createElement("button");
+      hiddenToggle.type = "button";
+      hiddenToggle.className = "teacher-hidden-toggle";
+      hiddenToggle.textContent = state.showHiddenStudents ? "Скрыть архив" : `Скрытые: ${hiddenCount}`;
+      hiddenToggle.addEventListener("click", () => {
+        state.showHiddenStudents = !state.showHiddenStudents;
+        renderTeacher();
+      });
+      accounts.appendChild(hiddenToggle);
+    }
+    allStudents.filter((student) => state.showHiddenStudents || !student.hidden_from_teacher).forEach((student) => {
+      const row = document.createElement("div");
+      row.className = "teacher-account-row";
+      row.classList.toggle("is-hidden-account", Boolean(student.hidden_from_teacher));
+      const identity = document.createElement("span");
+      const name = document.createElement("b");
+      name.textContent = student.name;
+      const login = document.createElement("small");
+      login.textContent = student.login;
+      identity.append(name, login);
+      const control = document.createElement("span");
+      control.className = "teacher-account-control";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = enrolledIds.has(student.id);
+      checkbox.setAttribute("aria-label", `Доступ к ДЗ: ${student.name}`);
+      const status = document.createElement("b");
+      status.textContent = checkbox.checked ? "Получает ДЗ" : "Только тренировка";
+      checkbox.addEventListener("change", async () => {
+        checkbox.disabled = true;
+        status.textContent = "Сохраняю...";
+        try {
+          await cloudStore.setStudentHomeworkAccess(student.id, checkbox.checked);
+          await refreshCloudData();
+          renderTeacher();
+        } catch (error) {
+          checkbox.checked = !checkbox.checked;
+          checkbox.disabled = false;
+          status.textContent = error.message || "Не удалось изменить доступ";
+        }
+      });
+      control.append(checkbox, status);
+      const actions = document.createElement("span");
+      actions.className = "teacher-account-actions";
+      const hideButton = document.createElement("button");
+      hideButton.type = "button";
+      hideButton.className = "icon-action";
+      hideButton.title = student.hidden_from_teacher ? "Вернуть ученика" : "Скрыть ученика";
+      hideButton.setAttribute("aria-label", hideButton.title);
+      hideButton.textContent = student.hidden_from_teacher ? "↩" : "−";
+      hideButton.addEventListener("click", async () => {
+        hideButton.disabled = true;
+        try {
+          await cloudStore.setStudentHidden(student.id, !student.hidden_from_teacher);
+          await refreshCloudData();
+          renderTeacher();
+        } catch (error) {
+          hideButton.disabled = false;
+          status.textContent = error.message || "Не удалось скрыть";
+        }
+      });
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "icon-action is-danger";
+      deleteButton.title = "Убрать из кабинета учителя";
+      deleteButton.setAttribute("aria-label", deleteButton.title);
+      deleteButton.textContent = "×";
+      deleteButton.addEventListener("click", async () => {
+        const approved = confirm(`Убрать ученика «${student.name}» из кабинета учителя? Профиль, вход и результаты ученика сохранятся, но больше не будут отображаться учителю.`);
+        if (!approved) return;
+        deleteButton.disabled = true;
+        try {
+          await cloudStore.deleteStudentAccount(student.id);
+          await refreshCloudData();
+          renderTeacher();
+        } catch (error) {
+          deleteButton.disabled = false;
+          status.textContent = error.message || "Не удалось удалить";
+        }
+      });
+      actions.append(hideButton, deleteButton);
+      row.append(identity, control, actions);
+      accounts.appendChild(row);
+    });
+    nodes.teacherReport.appendChild(accounts);
+  }
+  const homework = document.createElement("article");
+  homework.className = "review-item";
+  const assignedHomework = homeworkItems();
+  homework.innerHTML = `<strong>ДЗ: ${assignedHomework.length}</strong><span>${assignedHomework.map(homeworkTitle).join("; ") || "ДЗ пока не задано. Откройте предмет, источник и нажмите нужный вариант."}</span>`;
+  if (cloudStore && assignedHomework.length) {
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.className = "compact-button";
+    clearButton.textContent = "Снять все ДЗ";
+    clearButton.addEventListener("click", async () => {
+      if (!confirm("Снять все назначенные домашние задания?")) return;
+      clearButton.disabled = true;
+      await Promise.all(assignedHomework.map((item) => cloudStore.removeHomework({ homeworkId: item.id })));
+      await refreshCloudData();
+      renderTeacher();
+    });
+    homework.appendChild(clearButton);
+  }
+  nodes.teacherReport.appendChild(homework);
+  if (!submissions.length) {
+    const empty = document.createElement("article");
+    empty.className = "review-item";
+    empty.innerHTML = "<strong>Пока нет завершенных работ</strong><p>Когда ученик закончит вариант на этом устройстве, запись появится здесь.</p>";
+    nodes.teacherReport.appendChild(empty);
+    return;
+  }
+  const studentFolders = visibleStudents.map((student) => ({
+    student,
+    submissions: submissions.filter((submission) => (submission.userId || submission.user_id) === student.id)
+  })).filter((folder) => folder.submissions.length);
+  studentFolders.sort((a, b) => Math.max(...b.submissions.map(submissionTimestamp)) - Math.max(...a.submissions.map(submissionTimestamp)));
+  if (!studentFolders.length) {
+    const empty = document.createElement("article");
+    empty.className = "review-item";
+    empty.innerHTML = "<strong>Пока нет завершённых работ</strong><span>После завершения варианта работа появится внутри карточки ученика.</span>";
+    nodes.teacherReport.appendChild(empty);
+    return;
+  }
+  studentFolders.forEach(({ student, submissions: studentSubmissions }) => {
+    const latest = studentSubmissions.slice().sort((a, b) => submissionTimestamp(b) - submissionTimestamp(a))[0];
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "teacher-student-folder";
+    const identity = document.createElement("span");
+    const name = document.createElement("strong");
+    name.textContent = student.name;
+    const login = document.createElement("small");
+    login.textContent = student.login;
+    identity.append(name, login);
+    const workCount = document.createElement("span");
+    const count = document.createElement("b");
+    count.textContent = studentSubmissions.length;
+    const countLabel = document.createElement("small");
+    countLabel.textContent = pluralizeWorks(studentSubmissions.length);
+    workCount.append(count, countLabel);
+    const latestResult = document.createElement("span");
+    const score = document.createElement("b");
+    score.textContent = `${latest.score}/${latest.total}`;
+    const scoreLabel = document.createElement("small");
+    scoreLabel.textContent = "последняя";
+    latestResult.append(score, scoreLabel);
+    const arrow = document.createElement("i");
+    arrow.textContent = "›";
+    card.append(identity, workCount, latestResult, arrow);
+    card.addEventListener("click", () => {
+      state.teacherStudentId = student.id;
+      renderTeacher();
+    });
+    nodes.teacherReport.appendChild(card);
+  });
+}
+
+function pluralizeWorks(count) {
+  const value = Math.abs(Number(count)) % 100;
+  const last = value % 10;
+  if (value > 10 && value < 20) return "работ";
+  if (last === 1) return "работа";
+  if (last > 1 && last < 5) return "работы";
+  return "работ";
+}
+
+function submissionTimestamp(submission) {
+  return new Date(submission.at || submission.submitted_at || 0).getTime();
+}
+
+function renderTeacherStudentFolder(student, submissions) {
+  const header = document.createElement("article");
+  header.className = "review-item teacher-student-header";
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "compact-button";
+  back.textContent = "‹ К ученикам";
+  back.addEventListener("click", () => {
+    state.teacherStudentId = null;
+    renderTeacher();
+  });
+  const identity = document.createElement("span");
+  identity.innerHTML = `<strong>${student.name}</strong><small>${student.login}</small>`;
+  header.append(back, identity);
+  nodes.teacherReport.appendChild(header);
+  if (!submissions.length) {
+    const empty = document.createElement("article");
+    empty.className = "review-item";
+    empty.innerHTML = "<strong>Пока нет завершённых работ</strong><span>Решённые варианты ученика появятся здесь.</span>";
+    nodes.teacherReport.appendChild(empty);
+    return;
+  }
+  submissions.slice().sort((a, b) => submissionTimestamp(b) - submissionTimestamp(a)).forEach((submission) => {
+    nodes.teacherReport.appendChild(renderTeacherSubmissionCard(submission, student));
+  });
+}
+
+function renderTeacherSubmissionCard(submission, student) {
+  const item = document.createElement("article");
+  item.className = "review-item teacher-submission";
+  const date = new Date(submission.at || submission.submitted_at).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" });
+  const head = document.createElement("div");
+  head.className = "teacher-submission-head";
+  const heading = document.createElement("strong");
+  heading.textContent = submission.variantTitle || submission.variant_title;
+  const result = document.createElement("b");
+  result.textContent = `${submission.score}/${submission.total}`;
+  head.append(heading, result);
+  const meta = document.createElement("span");
+  meta.className = "teacher-submission-meta";
+  meta.textContent = `${submission.subjectTitle || submission.subject_title} · ${submission.sourceTitle || submission.source_title}${submission.homeworkId || submission.homework_id ? " · ДЗ" : ""} · ${date}`;
+  const footer = document.createElement("div");
+  footer.className = "teacher-submission-footer";
+  const mode = document.createElement("span");
+  mode.textContent = (submission.attemptMode || submission.attempt_mode) === "homework" ? "Домашняя работа" : "Самостоятельная работа";
+  footer.appendChild(mode);
+  item.append(head, meta, footer);
+  if (cloudStore) {
+    const detailsButton = document.createElement("button");
+    detailsButton.type = "button";
+    detailsButton.className = "ghost-button teacher-details-button";
+    detailsButton.textContent = "Проверить ответы";
+    detailsButton.addEventListener("click", () => openTeacherSubmission(submission, student, detailsButton));
+    footer.appendChild(detailsButton);
+  }
+  return item;
+}
+
+async function openTeacherSubmission(submission, student, button) {
+  button.disabled = true;
+  button.textContent = "Загрузка...";
+  try {
+    const userId = submission.userId || submission.user_id;
+    const variantId = submission.variantId || submission.variant_id;
+    const storedProgress = await cloudStore.loadStudentVariantProgress(userId, variantId);
+    const variant = findVariant(variantId);
+    if (!variant || !storedProgress) throw new Error("Подробные ответы для этой работы не найдены.");
+    const progress = progressForSubmission(storedProgress, submission, variant);
+    if (!progress) throw new Error("Ответы этой старой попытки не сохранились. Итоговый балл в карточке остаётся верным.");
+    state.teacherReview = { submission, student, progress, variant };
+    show("teacherReview");
+  } catch (error) {
+    button.textContent = error.message || "Не удалось загрузить ответы";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function progressForSubmission(progress, submission, variant) {
+  const targetTime = submissionTimestamp(submission);
+  const attempts = (progress.attempts || []).filter((attempt) => attempt?.answers);
+  if (attempts.length) {
+    const attempt = attempts.slice().sort((a, b) => Math.abs(new Date(a.at || 0).getTime() - targetTime) - Math.abs(new Date(b.at || 0).getTime() - targetTime))[0];
+    if (Number(attempt.score) === Number(submission.score)) return { ...progress, answers: attempt.answers };
+  }
+  if (progress.answers && countCorrect(variant, progress) === Number(submission.score)) return progress;
+  return null;
+}
+
+function analyticsRows(progressMap) {
+  return Object.entries(progressMap || {}).flatMap(([variantId, progress]) => {
+    const variant = findVariant(variantId);
+    if (!variant || isScanVariant(variant)) return [];
+    const context = findVariantContext(variantId);
+    const attempts = progress.attempts || [];
+    return attempts.map((attempt, index) => ({
+      variantId,
+      title: variant.title,
+      subjectTitle: context?.subject.title || "Предмет",
+      examType: (context?.subject.examType || "ege").toUpperCase(),
+      score: Number(attempt.score) || 0,
+      total: Number(attempt.total) || variantLength(variant),
+      at: attempt.at || null,
+      answers: attempt.answers || (index === attempts.length - 1 ? progress.answers : null)
+    }));
+  }).sort((a, b) => new Date(a.at || 0) - new Date(b.at || 0));
+}
+
+function trendForRows(rows) {
+  if (!rows.length) return { average: 0, delta: 0, label: "Нет результатов" };
+  const percentages = rows.map((row) => row.total ? row.score / row.total * 100 : 0);
+  const average = Math.round(percentages.reduce((sum, value) => sum + value, 0) / percentages.length);
+  const recent = percentages.slice(-3);
+  const previous = percentages.slice(-6, -3);
+  const recentAverage = recent.reduce((sum, value) => sum + value, 0) / recent.length;
+  const previousAverage = previous.length ? previous.reduce((sum, value) => sum + value, 0) / previous.length : recentAverage;
+  const delta = Math.round(recentAverage - previousAverage);
+  return { average, delta, label: delta > 0 ? `Прогресс +${delta}%` : delta < 0 ? `Снижение ${delta}%` : "Результат стабилен" };
+}
+
+function renderTeacherPerformance(allStudents) {
+  const students = allStudents.filter((student) => !student.hidden_from_teacher);
+  const submissions = filteredTeacherSubmissions();
+  if (!students.length) {
+    nodes.teacherReport.innerHTML = '<article class="review-item"><strong>Нет активных учеников</strong><p>Скрытых учеников можно вернуть во вкладке «Ученики».</p></article>';
+    return;
+  }
+  const summaries = students.map((student) => {
+    const studentRows = submissions
+      .filter((item) => (item.userId || item.user_id) === student.id)
+      .map((item) => ({ score: item.score, total: item.total, at: item.at || item.submitted_at }));
+    const trend = trendForRows(studentRows);
+    return { student, trend };
+  });
+  summaries.sort((a, b) => {
+    if (state.teacherSort === "average") return b.trend.average - a.trend.average;
+    if (state.teacherSort === "dynamic") return b.trend.delta - a.trend.delta;
+    return a.student.name.localeCompare(b.student.name, "ru");
+  });
+  summaries.forEach(({ student, trend }, index) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "performance-card";
+    card.innerHTML = `<span><strong>${state.teacherSort === "name" ? "" : `${index + 1}. `}${student.name}</strong><small>${student.login}</small></span><span class="performance-metric"><b>${trend.average}%</b><small class="${trend.delta < 0 ? "is-negative" : "is-positive"}">${trend.label}</small></span>`;
+    card.addEventListener("click", async () => {
+      card.disabled = true;
+      try {
+        const progress = cloudStore ? await cloudStore.loadStudentProgress(student.id) : {};
+        state.dashboardStudent = { student, progress };
+        show("dashboard");
+      } catch (error) {
+        card.disabled = false;
+        card.querySelector(".performance-metric small").textContent = error.message || "Не удалось загрузить";
+      }
+    });
+    nodes.teacherReport.appendChild(card);
+  });
+}
+
+function renderDashboard() {
+  const teacherView = Boolean(state.dashboardStudent);
+  const student = teacherView ? state.dashboardStudent.student : state.access;
+  const progress = teacherView ? state.dashboardStudent.progress : state.progress;
+  const rows = analyticsRows(progress);
+  const trend = trendForRows(rows);
+  const activeDates = new Set(rows.filter((row) => row.at).map((row) => new Date(row.at).toISOString().slice(0, 10)));
+  let streak = 0;
+  const cursor = new Date();
+  while (activeDates.has(cursor.toISOString().slice(0, 10))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 7);
+  const weeklyCount = rows.filter((row) => row.at && new Date(row.at) >= weekStart).length;
+  nodes.eyebrow.textContent = teacherView ? "Учитель · успеваемость" : "Личный кабинет";
+  nodes.screenTitle.textContent = student?.name || "Успеваемость";
+  nodes.dashboardSummary.innerHTML = `<p class="task-type">Динамика результатов</p><div class="dashboard-kpis"><span><b>${trend.average}%</b><small>точность</small></span><span><b>${streak}</b><small>дней подряд</small></span><span><b>${weeklyCount}/3</b><small>цель недели</small></span></div><p class="dashboard-verdict">${trend.label}</p>`;
+  nodes.dashboardList.innerHTML = "";
+  if (!rows.length) {
+    nodes.dashboardList.innerHTML = '<article class="review-item"><strong>Пока нет результатов</strong><p>После завершения первого интерактивного варианта здесь появится динамика.</p></article>';
+    return;
+  }
+  const calendar = document.createElement("article");
+  calendar.className = "dashboard-panel";
+  const calendarDays = Array.from({ length: 28 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (27 - index));
+    return { date, key: date.toISOString().slice(0, 10) };
+  });
+  calendar.innerHTML = `<strong>Активность за 4 недели</strong><div class="activity-calendar">${calendarDays.map(({ date, key }) => `<i class="${activeDates.has(key) ? "is-active" : ""}" title="${date.toLocaleDateString("ru-RU")}"></i>`).join("")}</div>`;
+  nodes.dashboardList.appendChild(calendar);
+  const groupMap = new Map();
+  rows.forEach((row) => {
+    const key = `${row.examType} · ${row.subjectTitle}`;
+    const values = groupMap.get(key) || [];
+    values.push(row.total ? row.score / row.total * 100 : 0);
+    groupMap.set(key, values);
+  });
+  const groups = [...groupMap].map(([label, values]) => ({
+    label,
+    average: Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+  })).sort((a, b) => b.average - a.average);
+  const strengths = document.createElement("article");
+  strengths.className = "dashboard-panel";
+  strengths.innerHTML = `<strong>Сильные и слабые направления</strong><div class="subject-metrics">${groups.map((group, index) => `<span><b>${group.label}</b><i>${group.average}%</i></span>`).join("")}</div><p>Рекомендация: ${groups.length ? `уделить внимание направлению «${groups[groups.length - 1].label}»` : "завершить первый вариант"}.</p>`;
+  nodes.dashboardList.appendChild(strengths);
+  rows.slice().reverse().forEach((row) => {
+    const percent = row.total ? Math.round(row.score / row.total * 100) : 0;
+    const item = document.createElement(row.answers ? "button" : "article");
+    if (row.answers) item.type = "button";
+    item.className = "dashboard-attempt";
+    item.innerHTML = `<span><strong>${row.title}</strong><small>${row.at ? new Date(row.at).toLocaleDateString("ru-RU") : "дата не указана"}</small></span><b>${row.score}/${row.total} · ${percent}%</b>`;
+    if (row.answers) {
+      item.title = "Открыть ответы и ошибки";
+      item.addEventListener("click", () => {
+        const context = findVariantContext(row.variantId);
+        if (!context) return;
+        state.teacherReview = {
+          submission: {
+            subjectTitle: row.subjectTitle,
+            sourceTitle: context.source.title
+          },
+          student,
+          progress: { answers: row.answers },
+          variant: context.variant,
+          returnScreen: "dashboard"
+        };
+        show("teacherReview");
+      });
+    }
+    nodes.dashboardList.appendChild(item);
+  });
+}
+
+function renderTeacherReview() {
+  const review = state.teacherReview;
+  if (!review) {
+    show("teacher");
+    return;
+  }
+  const { submission, student, progress, variant } = review;
+  const answers = progress.answers || {};
+  const correct = variant.questions.reduce((sum, question, index) => sum + (isCorrect(question, answers[index]) ? 1 : 0), 0);
+  const mistakes = variant.questions.length - correct;
+  nodes.eyebrow.textContent = "Проверка работы";
+  nodes.screenTitle.textContent = student?.name || submission.studentName || "Ученик";
+  nodes.teacherReviewMeta.textContent = `${submission.subjectTitle || submission.subject_title} · ${submission.sourceTitle || submission.source_title}`;
+  nodes.teacherReviewTitle.textContent = variant.title;
+  nodes.teacherReviewScore.textContent = `${correct}/${variant.questions.length} · ошибок: ${mistakes}`;
+  nodes.teacherReviewList.innerHTML = "";
+  variant.questions.forEach((question, index) => {
+    const answer = answers[index];
+    const correctAnswer = isCorrect(question, answer);
+    const item = document.createElement("article");
+    item.className = `review-item teacher-review-question ${correctAnswer ? "is-correct" : "is-wrong"}`;
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
+    item.setAttribute("aria-expanded", String(!correctAnswer));
+    const head = document.createElement("div");
+    head.className = "teacher-review-question-head";
+    const title = document.createElement("strong");
+    title.textContent = `${index + 1}. ${question.text}`;
+    const indicator = document.createElement("span");
+    indicator.className = "teacher-review-indicator";
+    indicator.textContent = "›";
+    head.append(title, indicator);
+    item.appendChild(head);
+    let details = null;
+    const setExpanded = (expanded) => {
+      if (expanded && !details) {
+        details = document.createElement("div");
+        details.className = "teacher-review-details";
+        appendReviewQuestionDetails(details, question);
+        item.insertBefore(details, values);
+      } else if (!expanded && details) {
+        details.remove();
+        details = null;
+      }
+      item.classList.toggle("is-expanded", expanded);
+      item.setAttribute("aria-expanded", String(expanded));
+    };
+    const values = document.createElement("div");
+    values.className = "teacher-review-values";
+    const userAnswer = document.createElement("span");
+    userAnswer.textContent = `Ответ ученика: ${formatAnswer(question, answer)}`;
+    const expected = document.createElement("span");
+    expected.textContent = `Правильно: ${formatCorrect(question)}`;
+    values.append(userAnswer, expected);
+    item.appendChild(values);
+    setExpanded(!correctAnswer);
+    item.addEventListener("click", () => setExpanded(item.getAttribute("aria-expanded") !== "true"));
+    item.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      setExpanded(item.getAttribute("aria-expanded") !== "true");
+    });
+    nodes.teacherReviewList.appendChild(item);
+  });
+}
+
+function taskTypeLabel(question) {
+  if (question.type === "match") return "Сопоставление: заполните таблицу цифрами";
+  if (question.type === "short") return "Краткий ответ: введите слово или число";
+  if (question.type === "digits") return "Краткий ответ: введите цифры";
+  if (question.type === "multi") return "Несколько ответов: выберите цифры";
+  return "Один ответ";
+}
+
+function letter(index) {
+  return "АБВГДЕЖЗ"[index] || String(index + 1);
+}
+
+function clearDraft() {
+  if (isScanVariant()) return;
+  const question = currentQuestion();
+  state.selected = question.type === "multi" ? [] : question.type === "short" || question.type === "digits" ? "" : null;
+  state.matching = {};
+}
+
+function loadDraftFromSaved() {
+  const question = currentQuestion();
+  const saved = variantProgress().answers[state.questionIndex];
+  if (saved?.matching) {
+    state.matching = { ...saved.matching };
+    return;
+  }
+  if (saved?.selected !== undefined) {
+    state.selected = Array.isArray(saved.selected) ? [...saved.selected] : saved.selected;
+    return;
+  }
+  if (state.selected === null && question.type === "multi") state.selected = [];
+  if (state.selected === null && question.type === "digits") state.selected = "";
+}
+
+function hasAnswer(question) {
+  if (question.type === "match") {
+    return question.left.every((_, index) => state.matching[index] !== undefined && state.matching[index] !== "");
+  }
+  if (question.type === "multi") return Array.isArray(state.selected) && state.selected.length > 0;
+  if (question.type === "short" || question.type === "digits") return typeof state.selected === "string" && state.selected.trim().length > 0;
+  return state.selected !== null;
+}
+
+function saveCurrentAnswer() {
+  const question = currentQuestion();
+  const progress = variantProgress();
+  progress.answers[state.questionIndex] = question.type === "match" ? { matching: { ...state.matching } } : { selected: state.selected };
+  delete progress.skipped[state.questionIndex];
+  saveProgress();
+}
+
+function markCurrentSkipped() {
+  const progress = variantProgress();
+  delete progress.answers[state.questionIndex];
+  progress.skipped[state.questionIndex] = true;
+  saveProgress();
+}
+
+function leaveCurrentQuestion() {
+  if (hasAnswer(currentQuestion())) saveCurrentAnswer();
+  else markCurrentSkipped();
+}
+
+function goToQuestion(index) {
+  if (index === state.questionIndex) return;
+  leaveCurrentQuestion();
+  state.questionIndex = index;
+  clearDraft();
+  renderExam();
+}
+
+function goNext() {
+  saveCurrentAnswer();
+  const variant = currentVariant();
+  if (state.questionIndex < variant.questions.length - 1) {
+    state.questionIndex += 1;
+    clearDraft();
+    renderExam();
+    return;
+  }
+  const progress = completeInteractiveAttempt(variant);
+  recordSubmission(variant, progress);
+  show("result");
+}
+
+function skipCurrentQuestion() {
+  markCurrentSkipped();
+  const variant = currentVariant();
+  if (state.questionIndex < variant.questions.length - 1) {
+    state.questionIndex += 1;
+    clearDraft();
+    renderExam();
+    return;
+  }
+  const progress = completeInteractiveAttempt(variant);
+  recordSubmission(variant, progress);
+  show("result");
+}
+
+function restartCurrentVariant() {
+  if (isHomeworkVariant(currentVariant()) && variantProgress().completed && !isTeacher()) {
+    alert("Это ДЗ: повторная попытка закрыта.");
+    return;
+  }
+  const previous = variantProgress();
+  state.progress[currentVariant().id] = {
+    completed: false,
+    best: previous.best || 0,
+    attempts: [...previous.attempts],
+    answers: {},
+    skipped: {}
+  };
+  state.questionIndex = 0;
+  clearDraft();
+  saveProgress();
+  show(isScanVariant() ? "scan" : "exam");
+}
+
+function completeInteractiveAttempt(variant) {
+  const progress = variantProgress(variant);
+  const score = countCorrect(variant, progress);
+  const attempt = {
+    score,
+    total: variantLength(variant),
+    at: new Date().toISOString(),
+    answers: JSON.parse(JSON.stringify(progress.answers || {}))
+  };
+  progress.completed = true;
+  progress.best = Math.max(progress.best || 0, score);
+  progress.attempts.push(attempt);
+  saveProgress();
+  return progress;
+}
+
+function latestAttempt(progress) {
+  return Array.isArray(progress.attempts) && progress.attempts.length
+    ? progress.attempts[progress.attempts.length - 1]
+    : null;
+}
+
+function hasRecordedResult(variant, progress) {
+  return isScanVariant(variant) ? progress.completed : Boolean(latestAttempt(progress));
+}
+
+function recordSubmission(variant, progress) {
+  if (!state.access || state.access.role !== "student") return;
+  const submissions = loadSubmissions();
+  const homework = homeworkForVariant(variant);
+  const existing = submissions.find((item) => item.variantId === variant.id && item.userId === state.access.id);
+  const attempt = latestAttempt(progress);
+  const entry = {
+    userId: state.access.id,
+    studentName: state.access.name,
+    login: state.access.login,
+    deviceId: state.access.deviceId,
+    subjectTitle: currentSubject().title,
+    sourceTitle: currentSource().title,
+    variantId: variant.id,
+    variantTitle: variant.title,
+    homeworkId: homework?.id || null,
+    score: attempt?.score ?? countCorrect(variant, progress),
+    total: attempt?.total ?? variantLength(variant),
+    attemptMode: homework ? "homework" : "practice",
+    at: attempt?.at || new Date().toISOString()
+  };
+  if (existing) Object.assign(existing, entry);
+  else submissions.push(entry);
+  saveSubmissions(submissions);
+  if (cloudStore) {
+    cloudStore.saveSubmission(entry).catch((error) => console.warn("Cloud submission save failed", error));
+  }
+}
+
+function isCorrect(question, answer) {
+  if (!answer) return false;
+  if (question.type === "match") return question.correct.every((value, index) => Number(answer.matching?.[index]) === value);
+  if (question.type === "short" || question.type === "digits") return question.correct.map(normalizeShort).includes(normalizeShort(answer.selected));
+  if (question.type === "multi") return sameSet(answer.selected, question.correct);
+  return answer.selected === question.correct;
+}
+
+function sameSet(a, b) {
+  return Array.isArray(a) && a.length === b.length && [...a].sort((x, y) => x - y).every((value, index) => value === [...b].sort((x, y) => x - y)[index]);
+}
+
+function countCorrect(variant, progress) {
+  if (isScanVariant(variant)) return 0;
+  return variant.questions.reduce((sum, question, index) => sum + (isCorrect(question, progress.answers[index]) ? 1 : 0), 0);
+}
+
+function formatAnswer(question, answer) {
+  if (!answer) return "нет ответа";
+  if (question.type === "match") return question.left.map((_, index) => answer.matching?.[index] === undefined ? "-" : Number(answer.matching[index]) + 1).join("");
+  if (question.type === "short" || question.type === "digits") return answer.selected || "нет ответа";
+  const selected = Array.isArray(answer.selected) ? answer.selected : [answer.selected];
+  return selected.map((index) => index + 1).join("");
+}
+
+function formatCorrect(question) {
+  if (question.type === "match") return question.correct.map((index) => index + 1).join("");
+  if (question.type === "short" || question.type === "digits") return question.correct[0];
+  const selected = Array.isArray(question.correct) ? question.correct : [question.correct];
+  return selected.map((index) => index + 1).join("");
+}
+
+function normalizeShort(value) {
+  return String(value || "").trim().toLowerCase().replaceAll("ё", "е");
+}
+
+function findVariant(variantId) {
+  return Object.values(subjects).flatMap((subject) => subject.sources).flatMap((sourceItem) => sourceItem.variants).find((variant) => variant.id === variantId);
+}
+
+function findVariantContext(variantId) {
+  for (const [subjectId, subject] of Object.entries(subjects)) {
+    for (const sourceItem of subject.sources) {
+      const variant = sourceItem.variants.find((item) => item.id === variantId);
+      if (variant) return { subjectId, subject, source: sourceItem, variant };
+    }
+  }
+  return null;
+}
+
+function goBack() {
+  if (state.screen === "subjects" && state.examType) {
+    state.examType = null;
+    state.subjectId = null;
+    show("subjects");
+  }
+  else if (state.screen === "sources") show("subjects");
+  else if (state.screen === "variants") show("sources");
+  else if (state.screen === "exam") show("variants");
+  else if (state.screen === "scan") show("variants");
+  else if (state.screen === "result") show("variants");
+  else if (state.screen === "image") show("exam");
+  else if (state.screen === "teacherReview") show(state.teacherReview?.returnScreen || "teacher");
+  else if (state.screen === "dashboard") {
+    if (state.dashboardStudent) {
+      state.dashboardStudent = null;
+      show("teacher");
+    } else {
+      show("subjects");
+    }
+  }
+  else if (state.screen === "teacher" && state.teacherStudentId) {
+    state.teacherStudentId = null;
+    renderTeacher();
+  }
+  else if (state.screen === "teacher") show("subjects");
+}
+
+function completeCurrentScanVariant() {
+  const progress = variantProgress();
+  progress.completed = true;
+  progress.best = 0;
+  saveProgress();
+  renderScan();
+}
+
+nodes.backButton.addEventListener("click", goBack);
+nodes.teacherStudentsTab.addEventListener("click", () => {
+  state.teacherTab = "students";
+  state.teacherStudentId = null;
+  renderTeacher();
+});
+nodes.teacherPerformanceTab.addEventListener("click", () => {
+  state.teacherTab = "performance";
+  state.teacherStudentId = null;
+  renderTeacher();
+});
+nodes.authLoginModeButton.addEventListener("click", () => setAuthMode("login"));
+nodes.authRegisterModeButton.addEventListener("click", () => setAuthMode("register"));
+nodes.registerButton.addEventListener("click", registerAccount);
+nodes.accessSubmitButton.addEventListener("click", loginWithAccess);
+nodes.passwordToggleButton.addEventListener("click", () => {
+  setPasswordVisible(nodes.accessCodeInput.type === "password");
+  nodes.accessCodeInput.focus();
+});
+nodes.accessCodeInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    if (state.authMode === "register") registerAccount();
+    else loginWithAccess();
+  }
+});
+nodes.studentNameInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") nodes.loginInput.focus();
+});
+nodes.loginInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") nodes.accessCodeInput.focus();
+});
+nodes.nextButton.addEventListener("click", goNext);
+nodes.skipButton.addEventListener("click", skipCurrentQuestion);
+nodes.restartVariantButton.addEventListener("click", restartCurrentVariant);
+nodes.completeScanVariantButton.addEventListener("click", completeCurrentScanVariant);
+nodes.repeatButton.addEventListener("click", restartCurrentVariant);
+nodes.mistakesReviewButton.addEventListener("click", () => {
+  state.reviewOpen = !state.reviewOpen;
+  renderResult();
+});
+nodes.nextVariantButton.addEventListener("click", () => {
+  state.variantIndex = (state.variantIndex + 1) % currentSource().variants.length;
+  restartCurrentVariant();
+});
+show(state.screen);
+
+(async function initCloudSession() {
+  if (!cloudStore) return;
+  try {
+    if (!state.access) {
+      const access = await cloudStore.getSessionProfile();
+      if (access) {
+        saveAccess(access);
+        state.screen = "subjects";
+      }
+    }
+    if (state.access) {
+      await refreshCloudData();
+      show(state.screen);
+    }
+  } catch (error) {
+    console.warn("Cloud session init failed", error);
+  }
+})();
+
+window.setInterval(async () => {
+  if (!cloudStore || !state.access || !state.cloudError) return;
+  await refreshCloudData();
+  if (!state.cloudError) render();
+}, 30000);
