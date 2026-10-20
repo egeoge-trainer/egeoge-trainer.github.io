@@ -132,4 +132,66 @@ window.localInteractiveSources = window.localInteractiveSources || [];
       title: 'Вариант 2',
       questions: questions2
     });
+
+  const previousVariant3 = previousSource.variants.find(
+    (variant) => variant.id === 'artasov-oge-history-2026-v3'
+  );
+  if (!previousVariant3) return;
+
+  const questions3 = structuredClone(previousVariant3.questions);
+  questions3[0] = {
+    type: 'match',
+    text: 'Установите соответствие между событиями и годами.',
+    left: ['Кровавое воскресенье', 'Соляной бунт в Москве', 'Крещение Руси'],
+    right: ['988 г.', '1068 г.', '1648 г.', '1825 г.', '1905 г.'],
+    correct: [4, 2, 0]
+  };
+  questions3[1] = {
+    type: 'digits',
+    text: 'Расположите исторические события в хронологической последовательности.',
+    context: [
+      '1) Учреждение Святейшего синода',
+      '2) Начало восстания под предводительством К. А. Булавина',
+      '3) Перенос столицы из Москвы в Санкт-Петербург',
+      '4) Издание Петром I указа о престолонаследии'
+    ],
+    correct: ['2314']
+  };
+  questions3[3] = {
+    type: 'multi',
+    text: 'Какие из перечисленных событий относятся к 1580-м гг.? Выберите два ответа.',
+    options: [
+      'Отмена кормлений',
+      'Осада Пскова войсками Стефана Батория',
+      'Созыв первого Земского собора',
+      'Принятие Судебника Ивана IV',
+      'Заключение Ям-Запольского перемирия между Россией и Речью Посполитой'
+    ],
+    correct: [1, 4]
+  };
+  questions3[12].options = [
+    '«Слово о Законе и Благодати»',
+    '«История о великом князе Московском»',
+    '«Хожение за три моря»',
+    'Изображение 4',
+    'Изображение 5'
+  ];
+
+  const keys3 = [
+    '531', '2314', 'былины', '25; 52', '5', '1432; 3214', '243',
+    'семнадцатый', 'Амур', '2', '4', 'Багратион', '35; 53', '4',
+    '2', '4', '1'
+  ];
+  questions3.forEach((question, index) => {
+    question.sourceTask = index + 1;
+    question.sourceVariant = 3;
+    question.explanation = `Эталон из таблицы ответов: ${keys3[index]}.`;
+  });
+  window.localInteractiveSources
+    .find((source) => source.id === 'artasov-oge-history-2027')
+    .variants.push({
+      id: 'artasov-oge-history-2027-v3',
+      title: 'Вариант 3',
+      questions: questions3
+    });
 })();
