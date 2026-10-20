@@ -66,4 +66,70 @@ window.localInteractiveSources = window.localInteractiveSources || [];
       questions
     }]
   });
+
+  const previousVariant2 = previousSource.variants.find(
+    (variant) => variant.id === 'artasov-oge-history-2026-v2'
+  );
+  if (!previousVariant2) return;
+
+  const questions2 = structuredClone(previousVariant2.questions);
+  questions2[0] = {
+    type: 'match',
+    text: 'Установите соответствие между событиями и годами.',
+    left: [
+      'Восстание декабристов на Сенатской площади в Санкт-Петербурге',
+      'Принятие Новоторгового устава',
+      'Заключение договора Руси с Византией'
+    ],
+    right: ['911 г.', '1068 г.', '1667 г.', '1825 г.', '1905 г.'],
+    correct: [3, 2, 0]
+  };
+  questions2[1] = {
+    type: 'digits',
+    text: 'Расположите исторические события в хронологической последовательности.',
+    context: [
+      '1) Формирование Первого народного (земского) ополчения',
+      '2) Смоленская война',
+      '3) Избрание Земским собором на царствование Михаила Романова',
+      '4) Заключение Деулинского перемирия с Речью Посполитой'
+    ],
+    correct: ['1342']
+  };
+  questions2[3] = {
+    type: 'multi',
+    text: 'Какие из перечисленных событий относятся к 1710-м гг.? Выберите два ответа.',
+    options: [
+      'Введение Табели о рангах',
+      'Учреждение первых коллегий',
+      'Заключение Ништадтского мирного договора между Россией и Швецией',
+      'Основание Санкт-Петербурга',
+      'Издание указа о единонаследии'
+    ],
+    correct: [1, 4]
+  };
+  questions2[12].options = [
+    '«Хожение за три моря»',
+    '«Житие протопопа Аввакума, им самим написанное»',
+    '«Чтение о Борисе и Глебе»',
+    'Изображение 4',
+    'Изображение 5'
+  ];
+
+  const keys2 = [
+    '431', '1342', 'половцы', '25; 52', '3', '2143; 4321', '125',
+    'Николай Второй', 'Цусимское', '3', '2', 'Айгунский', '14; 41',
+    '4', '2', '4', '1'
+  ];
+  questions2.forEach((question, index) => {
+    question.sourceTask = index + 1;
+    question.sourceVariant = 2;
+    question.explanation = `Эталон из таблицы ответов: ${keys2[index]}.`;
+  });
+  window.localInteractiveSources
+    .find((source) => source.id === 'artasov-oge-history-2027')
+    .variants.push({
+      id: 'artasov-oge-history-2027-v2',
+      title: 'Вариант 2',
+      questions: questions2
+    });
 })();
