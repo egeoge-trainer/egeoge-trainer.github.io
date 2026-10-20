@@ -701,7 +701,8 @@ function show(screen) {
   state.screen = screen;
   Object.entries(nodes.screens).forEach(([name, node]) => node.classList.toggle("is-hidden", name !== screen));
   nodes.backButton.classList.toggle("is-hidden", screen === "access" || (screen === "subjects" && !state.examType));
-  nodes.hero.classList.toggle("is-hidden", isTeacher() || screen === "access" || screen === "exam" || screen === "result" || screen === "scan" || screen === "image" || screen === "teacher" || screen === "teacherReview" || screen === "dashboard");
+  nodes.hero.classList.toggle("is-hidden", screen === "access" || screen === "exam" || screen === "result" || screen === "scan" || screen === "image" || screen === "teacher" || screen === "teacherReview" || screen === "dashboard");
+  nodes.hero.classList.toggle("is-teacher-view", isTeacher());
   render();
 }
 

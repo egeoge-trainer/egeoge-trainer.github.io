@@ -162,6 +162,10 @@ h2 {
   font-size: 21px;
 }
 
+.hero.is-teacher-view .hero-overlay {
+  display: none;
+}
+
 .screen {
   padding-top: 17px;
 }
