@@ -1329,8 +1329,8 @@ function renderTeacherTools() {
   printButton.type = "button";
   printButton.className = "compact-button";
   printButton.textContent = "PDF";
-  printButton.title = "Открыть печать и сохранить как PDF";
-  printButton.addEventListener("click", () => window.print());
+  printButton.title = "Сформировать подробный отчёт и сохранить как PDF";
+  printButton.addEventListener("click", printTeacherReport);
   tools.append(search, period, filter, sort, exportButton, printButton);
   nodes.teacherReport.appendChild(tools);
 }
@@ -1351,20 +1351,41 @@ function filteredTeacherSubmissions() {
   });
 }
 
-function exportTeacherReport() {
-  const studentById = new Map(state.cloudStudents.map((student) => [student.id, student]));
-  const rows = [["Ученик", "Email", "Вариант", "Режим", "Баллы", "Всего", "Дата"]];
-  filteredTeacherSubmissions().forEach((item) => {
+function teacherReportRows() {
+  const students = cloudStore ? state.cloudStudents : readDb().users.filter((user) => user.role === "student");
+  const query = state.teacherSearch.trim().toLowerCase();
+  const studentById = new Map(students
+    .filter((student) => !student.hidden_from_teacher && !student.removed_from_teacher)
+    .filter((student) => !query || `${student.name} ${student.login}`.toLowerCase().includes(query))
+    .map((student) => [student.id, student]));
+  return filteredTeacherSubmissions().flatMap((item) => {
     const student = studentById.get(item.userId || item.user_id);
-    rows.push([
-      student?.name || "",
-      student?.login || "",
-      item.variantTitle || item.variant_title || "",
-      (item.attemptMode || item.attempt_mode) === "homework" ? "ДЗ" : "Самостоятельно",
-      item.score,
-      item.total,
-      item.at || item.submitted_at || ""
-    ]);
+    if (!student) return [];
+    const variantId = item.variantId || item.variant_id;
+    const context = findVariantContext(variantId);
+    const score = Number(item.score) || 0;
+    const total = Number(item.total) || variantLength(context?.variant || { questions: [] });
+    const submittedAt = item.at || item.submitted_at;
+    return [{
+      student: student.name || item.studentName || "Ученик",
+      email: student.login || item.login || "",
+      subject: item.subjectTitle || item.subject_title || context?.subject.title || "",
+      source: item.sourceTitle || item.source_title || context?.source.title || "",
+      variant: item.variantTitle || item.variant_title || context?.variant.title || variantId || "",
+      mode: (item.attemptMode || item.attempt_mode) === "homework" ? "Домашняя работа" : "Самостоятельная работа",
+      score,
+      total,
+      accuracy: total ? Math.round(score / total * 100) : 0,
+      date: submittedAt ? new Date(submittedAt).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : ""
+    }];
+  }).sort((a, b) => a.student.localeCompare(b.student, "ru") || a.variant.localeCompare(b.variant, "ru"));
+}
+
+function exportTeacherReport() {
+  const reportRows = teacherReportRows();
+  const rows = [["Ученик", "Email", "Предмет", "Источник", "Вариант", "Тип работы", "Баллы", "Всего заданий", "Точность", "Дата"]];
+  reportRows.forEach((row) => {
+    rows.push([row.student, row.email, row.subject, row.source, row.variant, row.mode, row.score, row.total, `${row.accuracy}%`, row.date]);
   });
   const csv = "\ufeff" + rows.map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(";")).join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -1375,7 +1396,27 @@ function exportTeacherReport() {
   URL.revokeObjectURL(url);
 }
 
+function escapeReportHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]);
+}
+
+function printTeacherReport() {
+  const rows = teacherReportRows();
+  const periodLabels = { all: "всё время", week: "последняя неделя", month: "последний месяц" };
+  const report = window.open("", "_blank");
+  if (!report) {
+    alert("Браузер заблокировал окно отчёта. Разрешите всплывающие окна и повторите выгрузку.");
+    return;
+  }
+  const body = rows.length
+    ? rows.map((row) => `<tr><td>${escapeReportHtml(row.student)}<small>${escapeReportHtml(row.email)}</small></td><td>${escapeReportHtml(row.subject)}<small>${escapeReportHtml(row.source)}</small></td><td>${escapeReportHtml(row.variant)}<small>${escapeReportHtml(row.mode)}</small></td><td><b>${row.score}/${row.total}</b><small>${row.accuracy}% правильных ответов</small></td><td>${escapeReportHtml(row.date)}</td></tr>`).join("")
+    : '<tr><td colspan="5">За выбранный период завершённых работ нет.</td></tr>';
+  report.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Отчёт об успеваемости</title><style>@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{font-family:"Times New Roman",serif;color:#172026;margin:0}h1{font-size:22px;margin:0 0 4px}p{margin:0 0 14px;color:#52646b}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #cfc8bc;padding:7px;text-align:left;vertical-align:top}th{background:#f2eee6}small{display:block;color:#52646b;margin-top:2px}b{font-size:14px}@media print{button{display:none}}button{margin:16px 0;padding:8px 14px}</style></head><body><h1>Успеваемость учеников</h1><p>Период: ${periodLabels[state.teacherPeriod]}. В отчёте: ${rows.length} завершённых работ.</p><table><thead><tr><th>Ученик</th><th>Предмет и источник</th><th>Вариант</th><th>Результат</th><th>Дата</th></tr></thead><tbody>${body}</tbody></table><button onclick="window.print()">Сохранить как PDF</button></body></html>`);
+  report.document.close();
+}
+
 function renderTeacher() {
+  nodes.hero.classList.add("is-hidden");
   nodes.eyebrow.textContent = "ЕГЭ · админ";
   nodes.screenTitle.textContent = "Учитель";
   nodes.teacherStudentsTab.classList.toggle("is-active", state.teacherTab === "students");
@@ -1748,7 +1789,7 @@ function analyticsRows(progressMap) {
 }
 
 function trendForRows(rows) {
-  if (!rows.length) return { average: 0, delta: 0, label: "Нет результатов" };
+  if (!rows.length) return { count: 0, average: 0, delta: 0, label: "Нет результатов" };
   const percentages = rows.map((row) => row.total ? row.score / row.total * 100 : 0);
   const average = Math.round(percentages.reduce((sum, value) => sum + value, 0) / percentages.length);
   const recent = percentages.slice(-3);
@@ -1756,7 +1797,7 @@ function trendForRows(rows) {
   const recentAverage = recent.reduce((sum, value) => sum + value, 0) / recent.length;
   const previousAverage = previous.length ? previous.reduce((sum, value) => sum + value, 0) / previous.length : recentAverage;
   const delta = Math.round(recentAverage - previousAverage);
-  return { average, delta, label: delta > 0 ? `Прогресс +${delta}%` : delta < 0 ? `Снижение ${delta}%` : "Результат стабилен" };
+  return { count: rows.length, average, delta, label: delta > 0 ? `Прогресс +${delta}%` : delta < 0 ? `Снижение ${delta}%` : "Результат стабилен" };
 }
 
 function renderTeacherPerformance(allStudents) {
@@ -1766,6 +1807,10 @@ function renderTeacherPerformance(allStudents) {
     nodes.teacherReport.innerHTML = '<article class="review-item"><strong>Нет активных учеников</strong><p>Скрытых учеников можно вернуть во вкладке «Ученики».</p></article>';
     return;
   }
+  const explanation = document.createElement("article");
+  explanation.className = "review-item performance-explanation";
+  explanation.innerHTML = "<strong>Что показывает успеваемость</strong><p><b>Работы</b> — сколько вариантов ученик завершил за выбранный период. <b>Точность</b> — средний процент правильных ответов в этих вариантах. Динамика сравнивает последние три работы с предыдущими тремя.</p>";
+  nodes.teacherReport.appendChild(explanation);
   const summaries = students.map((student) => {
     const studentRows = submissions
       .filter((item) => (item.userId || item.user_id) === student.id)
@@ -1782,7 +1827,7 @@ function renderTeacherPerformance(allStudents) {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "performance-card";
-    card.innerHTML = `<span><strong>${state.teacherSort === "name" ? "" : `${index + 1}. `}${student.name}</strong><small>${student.login}</small></span><span class="performance-metric"><b>${trend.average}%</b><small class="${trend.delta < 0 ? "is-negative" : "is-positive"}">${trend.label}</small></span>`;
+    card.innerHTML = `<span><strong>${state.teacherSort === "name" ? "" : `${index + 1}. `}${student.name}</strong><small>${student.login}</small></span><span class="performance-metric"><b>${trend.count} ${pluralizeWorks(trend.count)} · ${trend.average}%</b><small class="${trend.delta < 0 ? "is-negative" : "is-positive"}">${trend.label}</small></span>`;
     card.addEventListener("click", async () => {
       card.disabled = true;
       try {
