@@ -424,6 +424,22 @@ h2 {
   white-space: nowrap;
 }
 
+.task-table.is-grouped {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.task-table.is-grouped th,
+.task-table.is-grouped td {
+  padding: 7px 2px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.task-table.is-grouped thead th[rowspan] {
+  width: 42%;
+}
+
 .task-table caption {
   text-align: left;
   font-size: 14px;
