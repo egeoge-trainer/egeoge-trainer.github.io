@@ -194,4 +194,63 @@ window.localInteractiveSources = window.localInteractiveSources || [];
       title: 'Вариант 3',
       questions: questions3
     });
+
+  const previousVariant4 = previousSource.variants.find(
+    (variant) => variant.id === 'artasov-oge-history-2026-v4'
+  );
+  if (!previousVariant4) return;
+
+  const questions4 = structuredClone(previousVariant4.questions);
+  questions4[0] = {
+    type: 'match',
+    text: 'Установите соответствие между событиями и годами.',
+    left: [
+      'Издание Жалованной грамоты дворянству',
+      'Заключение Столбовского мира между Россией и Швецией',
+      'Любечский съезд князей'
+    ],
+    right: ['1097 г.', '1382 г.', '1617 г.', '1785 г.', '1905 г.'],
+    correct: [3, 2, 0]
+  };
+  questions4[1] = {
+    type: 'digits',
+    text: 'Расположите исторические события в хронологической последовательности.',
+    context: [
+      '1) Разорение Москвы войском хана Тохтамыша',
+      '2) Ледовое побоище',
+      '3) Антиордынское восстание в Твери',
+      '4) Невская битва'
+    ],
+    correct: ['4231']
+  };
+  questions4[3] = {
+    type: 'multi',
+    text: 'Какие из перечисленных событий (процессов) произошли в ходе Отечественной войны 1812 г.? Выберите два ответа.',
+    options: [
+      'Взятие русскими войсками крепости Измаил',
+      'Венский конгресс',
+      'Битва при Лейпциге',
+      'Военный совет в Филях',
+      'Сражение при Малоярославце'
+    ],
+    correct: [3, 4]
+  };
+
+  const keys4 = [
+    '431', '4231', 'бироновщина', '45; 54', '3', '1324; 2413', '135',
+    'семнадцатый', 'Речь Посполитая', '3', '2', 'Канкрин', '25; 52',
+    '2', '3', '2', '1'
+  ];
+  questions4.forEach((question, index) => {
+    question.sourceTask = index + 1;
+    question.sourceVariant = 4;
+    question.explanation = `Эталон из таблицы ответов: ${keys4[index]}.`;
+  });
+  window.localInteractiveSources
+    .find((source) => source.id === 'artasov-oge-history-2027')
+    .variants.push({
+      id: 'artasov-oge-history-2027-v4',
+      title: 'Вариант 4',
+      questions: questions4
+    });
 })();
