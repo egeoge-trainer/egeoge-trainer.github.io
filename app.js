@@ -97,6 +97,7 @@ const nodes = {
   screens: {
     access: document.querySelector("#accessScreen"),
     subjects: document.querySelector("#subjectScreen"),
+    profile: document.querySelector("#profileScreen"),
     sources: document.querySelector("#sourceScreen"),
     variants: document.querySelector("#variantScreen"),
     exam: document.querySelector("#examScreen"),
@@ -146,6 +147,11 @@ const nodes = {
   registerButton: document.querySelector("#registerButton"),
   accessSubmitButton: document.querySelector("#accessSubmitButton"),
   accessError: document.querySelector("#accessError"),
+  profileNameInput: document.querySelector("#profileNameInput"),
+  profileEmailInput: document.querySelector("#profileEmailInput"),
+  profileStatus: document.querySelector("#profileStatus"),
+  saveProfileButton: document.querySelector("#saveProfileButton"),
+  logoutButton: document.querySelector("#logoutButton"),
   teacherReport: document.querySelector("#teacherReport"),
   teacherSectionTitle: document.querySelector("#teacherSectionTitle"),
   teacherStudentsTab: document.querySelector("#teacherStudentsTab"),
@@ -701,7 +707,7 @@ function show(screen) {
   state.screen = screen;
   Object.entries(nodes.screens).forEach(([name, node]) => node.classList.toggle("is-hidden", name !== screen));
   nodes.backButton.classList.toggle("is-hidden", screen === "access" || (screen === "subjects" && !state.examType));
-  nodes.hero.classList.toggle("is-hidden", screen === "access" || screen === "exam" || screen === "result" || screen === "scan" || screen === "image" || screen === "teacher" || screen === "teacherReview" || screen === "dashboard");
+  nodes.hero.classList.toggle("is-hidden", screen === "access" || screen === "profile" || screen === "exam" || screen === "result" || screen === "scan" || screen === "image" || screen === "teacher" || screen === "teacherReview" || screen === "dashboard");
   nodes.hero.classList.toggle("is-teacher-view", isTeacher());
   render();
 }
@@ -711,6 +717,7 @@ function render() {
   renderSourceNote();
   if (state.screen === "access") renderAccess();
   if (state.screen === "subjects") renderSubjects();
+  if (state.screen === "profile") renderProfile();
   if (state.screen === "sources") renderSources();
   if (state.screen === "variants") renderVariants();
   if (state.screen === "exam") renderExam();
@@ -776,19 +783,58 @@ function renderSubjects() {
     nodes.subjectList.appendChild(card);
   });
   const accountCard = document.createElement("button");
-  accountCard.className = "card";
+  accountCard.className = "card profile-entry";
   accountCard.type = "button";
-  accountCard.innerHTML = `<div><strong>${state.access.name}</strong><span>${isTeacher() ? "Учитель" : "Ученик"} · ${state.access.login}</span><div class="badge-line"><b class="badge">выйти</b></div></div><i>×</i>`;
+  accountCard.innerHTML = `<div><strong>${state.access.name}</strong><span>${isTeacher() ? "Учитель" : "Ученик"} · ${state.access.login}</span><div class="badge-line"><b class="badge">профиль</b></div></div><i>›</i>`;
   accountCard.addEventListener("click", () => {
-    clearAccess();
-    state.examType = null;
-    nodes.studentNameInput.value = "";
-    nodes.loginInput.value = "";
-    nodes.accessCodeInput.value = "";
-    setPasswordVisible(false);
-    show("access");
+    show("profile");
   });
   nodes.subjectList.appendChild(accountCard);
+}
+
+function renderProfile() {
+  nodes.eyebrow.textContent = isTeacher() ? "Учитель · профиль" : "Ученик · профиль";
+  nodes.screenTitle.textContent = "Профиль";
+  nodes.profileNameInput.value = state.access?.name || "";
+  nodes.profileEmailInput.value = state.access?.login || "";
+  nodes.profileStatus.textContent = "";
+}
+
+async function saveProfileChanges() {
+  const name = nodes.profileNameInput.value.trim();
+  const login = nodes.profileEmailInput.value.trim().toLowerCase();
+  if (!name || !EMAIL_PATTERN.test(login)) {
+    nodes.profileStatus.textContent = "Укажите ФИО и корректный email.";
+    return;
+  }
+  nodes.saveProfileButton.disabled = true;
+  nodes.profileStatus.textContent = "Сохраняем изменения...";
+  try {
+    const updated = cloudStore?.updateProfile
+      ? await cloudStore.updateProfile({ name, login })
+      : { ...state.access, name, login };
+    state.access = { ...state.access, ...updated, name, login: updated.login || login };
+    localStorage.setItem(ACCESS_KEY, JSON.stringify(state.access));
+    nodes.profileEmailInput.value = state.access.login;
+    nodes.profileStatus.textContent = updated.emailPending
+      ? `ФИО сохранено. Подтвердите новую почту ${updated.requestedEmail} по письму от Supabase.`
+      : "Изменения сохранены.";
+  } catch (error) {
+    nodes.profileStatus.textContent = error?.message || "Не удалось сохранить профиль.";
+  } finally {
+    nodes.saveProfileButton.disabled = false;
+  }
+}
+
+function logoutWithConfirmation() {
+  if (!confirm("Вы точно хотите выйти из приложения?")) return;
+  clearAccess();
+  state.examType = null;
+  nodes.studentNameInput.value = "";
+  nodes.loginInput.value = "";
+  nodes.accessCodeInput.value = "";
+  setPasswordVisible(false);
+  show("access");
 }
 
 function renderSources() {
@@ -2235,6 +2281,7 @@ function goBack() {
     renderTeacher();
   }
   else if (state.screen === "teacher") show("subjects");
+  else if (state.screen === "profile") show("subjects");
 }
 
 function completeCurrentScanVariant() {
@@ -2246,6 +2293,8 @@ function completeCurrentScanVariant() {
 }
 
 nodes.backButton.addEventListener("click", goBack);
+nodes.saveProfileButton.addEventListener("click", saveProfileChanges);
+nodes.logoutButton.addEventListener("click", logoutWithConfirmation);
 nodes.teacherStudentsTab.addEventListener("click", () => {
   state.teacherTab = "students";
   state.teacherStudentId = null;

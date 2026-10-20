@@ -424,6 +424,23 @@ h2 {
   white-space: nowrap;
 }
 
+.profile-entry { border-color: rgba(30, 119, 109, 0.24); }
+.profile-card { display: grid; gap: 12px; }
+.profile-card .primary-button { width: 100%; }
+.profile-status { min-height: 18px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.logout-button {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 12px;
+  border: 1px solid rgba(188, 73, 61, 0.28);
+  border-radius: 8px;
+  background: #fff9f7;
+  color: #9b4037;
+  font: inherit;
+  font-weight: 700;
+}
+.logout-button:hover, .logout-button:focus-visible { border-color: rgba(188, 73, 61, 0.5); background: #fff1ed; }
+
 .task-table.is-grouped {
   min-width: 0;
   table-layout: fixed;

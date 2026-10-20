@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ЕГЭ и ОГЭ</title>
-    <link rel="stylesheet" href="./styles.css?v=20261020-45">
+    <link rel="stylesheet" href="./styles.css?v=20261020-46">
   </head>
   <body>
     <main class="workspace">
@@ -65,6 +65,18 @@
 
           <section class="screen is-hidden" id="subjectScreen" aria-label="Выбор предмета">
             <div class="screen-grid" id="subjectList"></div>
+          </section>
+
+          <section class="screen is-hidden" id="profileScreen" aria-label="Профиль пользователя">
+            <article class="task-card profile-card">
+              <p class="task-type">Аккаунт</p>
+              <h2>Профиль</h2>
+              <label class="short-row"><span>ФИО</span><input id="profileNameInput" type="text" autocomplete="name" placeholder="Фамилия Имя Отчество"></label>
+              <label class="short-row"><span>Email</span><input id="profileEmailInput" type="email" autocomplete="email" placeholder="ivan@example.com"></label>
+              <p class="profile-status" id="profileStatus" aria-live="polite"></p>
+              <button class="primary-button" id="saveProfileButton" type="button">Сохранить изменения</button>
+            </article>
+            <button class="logout-button" id="logoutButton" type="button">Выйти из приложения</button>
           </section>
 
           <section class="screen is-hidden" id="sourceScreen" aria-label="Выбор источника">
@@ -160,14 +172,14 @@
       </section>
     </main>
     <script src="./supabase-config.js?v=20260917-14"></script>
-    <script src="./supabase-store.js?v=20261010-36"></script>
+    <script src="./supabase-store.js?v=20261020-37"></script>
     <script src="./local-interactive.js?v=20260917-14"></script>
   <script src="./social-2027-interactive.js?v=20260929-40"></script>
     <script src="./oge-interactive.js?v=20260917-14"></script>
     <script src="./oge-social-2027-interactive.js?v=20261020-30"></script>
     <script src="./oge-history-interactive.js?v=20260922-30"></script>
     <script src="./oge-history-2027-interactive.js?v=20261020-30"></script>
-    <script src="./app.js?v=20261020-44"></script>
+    <script src="./app.js?v=20261020-45"></script>
     <script src="./patch.js?v=20260917-14"></script>
   </body>
 </html>

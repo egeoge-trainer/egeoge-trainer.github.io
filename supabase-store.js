@@ -162,6 +162,31 @@
     clearSession();
   }
 
+  async function updateProfile({ name, login }) {
+    const session = readSession();
+    if (!session?.access_token || !session?.user?.id) throw new Error("Сеанс завершён. Войдите снова.");
+    const requestedEmail = String(login).trim().toLowerCase();
+    let activeEmail = session.user.email || requestedEmail;
+    let emailPending = false;
+    if (requestedEmail !== activeEmail) {
+      const authResult = await request("/auth/v1/user", {
+        method: "PUT",
+        token: session.access_token,
+        body: JSON.stringify({ email: requestedEmail })
+      });
+      session.user = authResult;
+      writeSession(session);
+      activeEmail = authResult?.email || activeEmail;
+      emailPending = activeEmail !== requestedEmail;
+    }
+    await request(`/rest/v1/profiles?id=eq.${encodeURIComponent(session.user.id)}`, {
+      method: "PATCH",
+      token: session.access_token,
+      body: JSON.stringify({ name, login: activeEmail })
+    });
+    return { ...(await getProfile(session.user.id, session.access_token)), emailPending, requestedEmail };
+  }
+
   async function loadProgress(userId) {
     const session = readSession();
     const rows = await request(`/rest/v1/progress?select=variant_id,data&user_id=eq.${encodeURIComponent(userId)}`, {
@@ -366,6 +391,7 @@
     registerStudent,
     signIn,
     signOut,
+    updateProfile,
     loadProgress,
     saveVariantProgress,
     loadHomework,
