@@ -11,6 +11,38 @@ ASSETS = Path("assets/ege-social-fipi-2027")
 TARGET = Path("ege-social-fipi-2027-interactive.js")
 STARTS = [9, 18, 27, 36, 45, 53, 62, 71, 79, 88, 97, 105, 114, 123, 132, 140, 149, 158, 167, 176, 185, 194, 203, 212, 221, 230, 239, 247, 255, 264]
 MATCH_TASKS = {3, 6, 13, 15}
+MATCH_RIGHT_OVERRIDES = {
+    (1, 3): ["Традиционное (аграрное) общество", "Индустриальное общество", "Постиндустриальное общество"],
+    (18, 3): ["Академические права", "Обязанности"],
+    (20, 3): ["Массовая культура", "Элитарная культура", "Народная культура"],
+    (20, 6): ["Краткосрочные конкурентные преимущества", "Долгосрочные конкурентные преимущества"],
+    (30, 13): ["Исключительное ведение Российской Федерации", "Совместное ведение Российской Федерации и субъектов Российской Федерации"],
+}
+OPTION_OVERRIDES = {
+    (1, 9): [
+        "Доля тех, кто предпочитает непродовольственные товары иностранного производства, среди 46-60-летних опрошенных больше, чем среди 18-30-летних опрошенных.",
+        "Среди 18-30-летних опрошенных доля тех, кто не обращает внимания на то, где товар произведён, больше доли тех, кто предпочитает непродовольственные товары иностранного производства.",
+        "Среди 18-30-летних опрошенных доля тех, кто предпочитает непродовольственные товары российского производства, больше доли тех, кто затруднился ответить.",
+        "Одинаковые доли 46-60-летних опрошенных ответили, что предпочитают непродовольственные товары российского и иностранного производства.",
+        "Страна-производитель не имеет значения для равных долей опрошенных обеих групп.",
+    ],
+}
+MATCH_LEFT_OVERRIDES = {
+    (29, 6): [
+        "Водный налог",
+        "Государственная пошлина",
+        "Налог на добычу полезных ископаемых",
+        "Налог на имущество организаций",
+        "Налог на имущество физических лиц",
+    ],
+    (30, 13): [
+        "Федеральная государственная собственность и управление ею",
+        "Определение статуса и защита государственной границы",
+        "Социальная защита, включая социальное обеспечение",
+        "Кадры судебных и правоохранительных органов",
+        "Адвокатура, нотариат",
+    ],
+}
 
 ANSWERS_1_8 = [
     "45 135 23132 134 134 42313 1456 245",
@@ -223,6 +255,93 @@ def region_text(boundary, next_boundary):
     return clean(text)
 
 
+def region_lines(boundary, next_boundary):
+    page, top, left, width, height = boundary
+    bottom = next_boundary[1] if next_boundary and next_boundary[0] == page else 2290
+    cutoff = left + width + 15
+    return [
+        line for line in lines(page)
+        if top <= (line["bbox"]["y0"] + line["bbox"]["y1"]) / 2 < bottom
+        and line["bbox"]["x1"] > cutoff
+    ]
+
+
+def matching_question(variant, task, boundary, next_boundary, answer):
+    source_lines = region_lines(boundary, next_boundary)
+    words = [word for line in source_lines for word in line["words"]]
+    stop_y = next(
+        (line["bbox"]["y0"] for line in source_lines if "Запишите в таблицу" in clean(" ".join(word["text"] for word in line["words"]))),
+        max(word["bbox"]["y1"] for word in words),
+    )
+    words = [word for word in words if word["bbox"]["y0"] < stop_y]
+    right_markers = [
+        word for word in words
+        if re.fullmatch(r"(?:[1-4]|8|83)\)", word["text"].replace(" ", ""))
+        and word["bbox"]["x0"] > 700
+    ]
+    manual_right = MATCH_RIGHT_OVERRIDES.get((variant, task))
+    if not right_markers and not manual_right:
+        raise RuntimeError("Matching table right column not found")
+    split_x = min(word["bbox"]["x0"] for word in right_markers) - 12 if right_markers else 1000
+
+    def column_text(right):
+        rows = []
+        for line in source_lines:
+            if line["bbox"]["y0"] >= stop_y:
+                continue
+            selected = [
+                word["text"] for word in line["words"]
+                if (word["bbox"]["x0"] >= split_x) == right
+            ]
+            if selected:
+                rows.append(" ".join(selected))
+        return clean("\n".join(rows))
+
+    left_text = column_text(False)
+    right_text = column_text(True)
+    left_matches = list(re.finditer(r"(?<!\w)([АБВГД])\)\s*", left_text))
+    manual_left = MATCH_LEFT_OVERRIDES.get((variant, task))
+    if len(left_matches) < 5 and not manual_left:
+        raise RuntimeError("Matching table rows not found")
+
+    if manual_left:
+        left = manual_left
+    else:
+        left = []
+        for index, match in enumerate(left_matches[:5]):
+            end = left_matches[index + 1].start() if index + 1 < 5 else len(left_text)
+            left.append(clean(left_text[match.end():end]))
+    maximum = max(int(char) for char in answer)
+    if manual_right:
+        right = manual_right
+    else:
+        marker_x = min(word["bbox"]["x0"] for word in right_markers)
+        marker_y = min(word["bbox"]["y0"] for word in right_markers)
+        groups = []
+        for line in source_lines:
+            row = [word for word in line["words"] if word["bbox"]["x0"] >= split_x]
+            if not row or line["bbox"]["y1"] < marker_y or line["bbox"]["y0"] >= stop_y:
+                continue
+            if row[0]["bbox"]["x0"] <= marker_x + 35:
+                groups.append([])
+            if groups:
+                groups[-1].extend(word["text"] for word in row)
+        right = []
+        for group in groups[:maximum]:
+            while group and len(re.sub(r"\W", "", group[0])) <= 3:
+                group.pop(0)
+            right.append(clean(" ".join(group)))
+    if len(left) != 5 or len(right) < maximum:
+        raise RuntimeError(f"Incomplete matching table: {len(left)} x {len(right)}")
+    return {
+        "type": "match",
+        "text": "Установите соответствие: к каждой позиции первого столбца подберите позицию из второго столбца.",
+        "left": left,
+        "right": right,
+        "correct": [int(char) - 1 for char in answer],
+    }
+
+
 def choice_question(text, answer):
     matches = list(re.finditer(r"(?<!\d)([1-6]|8|83)\s*\)\s*", text))
     numbered = []
@@ -265,6 +384,55 @@ def crop_task(variant, task, boundary, next_boundary):
     return f"./{path.as_posix()}"
 
 
+def chart_question_text(text):
+    instruction = re.search(r"Найдите в приведённом списке выводы", text)
+    intro = re.split(r"Полученные результаты|Результаты опроса", text, maxsplit=1)[0]
+    if instruction:
+        tail = text[instruction.start():]
+    else:
+        first_option = re.search(r"(?<!\d)1\s*\)\s*", text)
+        if not first_option:
+            raise RuntimeError("Chart conclusions and options not found")
+        tail = "Найдите выводы, которые можно сделать на основе диаграммы. " + text[first_option.start():]
+    return clean(intro + " Полученные результаты представлены на диаграмме. " + tail)
+
+
+def crop_chart(variant, boundary, next_boundary):
+    page, top, left, width, height = boundary
+    source_lines = region_lines(boundary, next_boundary)
+    result_line = next(
+        (line for line in source_lines if "представлены" in clean(" ".join(word["text"] for word in line["words"])).lower()
+         or "приведены на диаграмме" in clean(" ".join(word["text"] for word in line["words"])).lower()),
+        None,
+    )
+    instruction_line = next(
+        (line for line in source_lines if "Найдите в приведённом списке выводы" in clean(" ".join(word["text"] for word in line["words"]))),
+        None,
+    )
+    if not instruction_line:
+        instruction_line = next(
+            (line for line in source_lines
+             if line["bbox"]["y0"] > (result_line["bbox"]["y1"] if result_line else 0)
+             and re.search(r"(?<!\d)1\s*\)", clean(" ".join(word["text"] for word in line["words"])))),
+            None,
+        )
+    if not result_line:
+        raise RuntimeError(f"Chart crop bounds not found for variant {variant}")
+    if instruction_line and instruction_line["bbox"]["y0"] > result_line["bbox"]["y1"]:
+        bottom = instruction_line["bbox"]["y0"] - 8
+    elif next_boundary and next_boundary[0] > page:
+        bottom = 2265
+    else:
+        raise RuntimeError(f"Chart crop bounds not found for variant {variant}")
+    source = Image.open(ROOT / "pages" / f"page-{page:03d}.png").convert("RGB")
+    crop = source.crop((235, result_line["bbox"]["y1"] + 8, 1680, bottom))
+    folder = ASSETS / f"variant-{variant:02d}"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "task-09.webp"
+    crop.save(path, "WEBP", quality=90, method=6)
+    return f"./{path.as_posix()}"
+
+
 def main():
     answers = [left.split() + right.split() for left, right in zip(ANSWERS_1_8, ANSWERS_9_16)]
     variants = []
@@ -282,21 +450,20 @@ def main():
             answer = answers[variant - 1][index]
             text = region_text(boundary, next_boundary)
             if task in MATCH_TASKS:
-                question = {
-                    "type": "digits",
-                    "text": "Установите соответствие. Рассмотрите таблицу на изображении и запишите последовательность цифр.",
-                    "image": crop_task(variant, task, boundary, next_boundary),
-                    "alt": f"Таблица для задания {task} варианта {variant}",
-                    "correct": [answer],
-                }
+                try:
+                    question = matching_question(variant, task, boundary, next_boundary, answer)
+                except RuntimeError as error:
+                    raise RuntimeError(f"Variant {variant}, task {task}: {error}") from error
             else:
                 try:
-                    question = choice_question(text, answer)
+                    question = choice_question(chart_question_text(text) if task == 9 else text, answer)
                 except RuntimeError as error:
                     (ROOT / "failed-task.txt").write_text(f"{variant}.{task}\n{text}", encoding="utf-8")
                     raise RuntimeError(f"Variant {variant}, task {task}: {error}") from error
                 if task == 9:
-                    question["image"] = crop_task(variant, task, boundary, next_boundary)
+                    if (variant, task) in OPTION_OVERRIDES:
+                        question["options"] = OPTION_OVERRIDES[(variant, task)]
+                    question["image"] = crop_chart(variant, boundary, next_boundary)
                     question["isChart"] = True
                     question["alt"] = f"Диаграмма и условия задания 9 варианта {variant}"
             question.update(
