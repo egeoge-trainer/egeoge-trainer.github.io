@@ -2,10 +2,10 @@ window.localInteractiveSources = window.localInteractiveSources || [];
 window.localInteractiveSources.push({
   "subjectId": "social",
   "id": "ege-social-fipi-2027",
-  "title": "Котова-Лискова: типовые варианты",
+  "title": "Тренировочные варианты",
   "year": "2027",
-  "description": "ЕГЭ-2027 · Обществознание · 30 вариантов",
-  "authorLine": "Котова, Лискова · ЕГЭ · 2027",
+  "description": "Котова-Лискова · 2027 · первая часть",
+  "authorLine": "Котова-Лискова · 2027 · первая часть",
   "variants": [
     {
       "id": "ege-social-fipi-2027-v1",
